@@ -31,3 +31,13 @@ def test_cannot_assign_twice():
 def test_unknown_status_text_is_rejected():
     with pytest.raises(ValueError):
         Status("NEWW")
+def test_status_cannot_be_set_directly():
+    inc = Incident("INC1", "Payment app down")
+    with pytest.raises(AttributeError):
+        inc.status = Status.CLOSED
+
+
+def test_incident_id_cannot_be_changed():
+    inc = Incident("INC1", "Payment app down")
+    with pytest.raises(AttributeError):
+        inc.incident_id = "HACKED"

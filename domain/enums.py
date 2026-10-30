@@ -31,3 +31,10 @@ class Urgency(Enum):
     LOW = 1
     MEDIUM = 2
     HIGH = 3
+
+
+
+class Role(Enum):
+    EMPLOYEE = "EMPLOYEE"
+    TECHNICIAN = "TECHNICIAN"
+    ADMIN = "ADMIN"
