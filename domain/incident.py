@@ -1,3 +1,6 @@
+from dataclasses import dataclass
+
+from domain.enums import Status
 from domain.events import (
     SYSTEM,
     IncidentAssigned,
@@ -14,6 +17,20 @@ from domain.permissions import check_permission
 from domain.states import NewState
 
 
+@dataclass(frozen=True)
+class Note:
+    author_id: str
+    text: str
+    created_at: object
+
+
+@dataclass(frozen=True)
+class Feedback:
+    rating: int
+    comment: str
+    created_at: object
+
+
 class Incident:
     def __init__(
         self,
@@ -23,6 +40,10 @@ class Incident:
         clock=None,
         reporter=None,
         service=None,
+        category=None,
+        impact=None,
+        urgency=None,
+        affected_users=0,
     ):
         if bus is not None and clock is None:
             raise ValidationError("A clock is required when an event bus is used")
@@ -32,10 +53,17 @@ class Incident:
         self._clock = clock
         self._reporter = reporter
         self._service = service
+        self._category = category
+        self._impact = impact
+        self._urgency = urgency
+        self._affected_users = affected_users
         self._state = NewState()
         self._sla = None
         self._priority = None
         self._technician = None
+        self._notes = []
+        self._resolution = None
+        self._feedback = None
 
     # ---------- reading ----------
     @property
@@ -69,6 +97,34 @@ class Incident:
     @property
     def service(self):
         return self._service
+
+    @property
+    def category(self):
+        return self._category
+
+    @property
+    def impact(self):
+        return self._impact
+
+    @property
+    def urgency(self):
+        return self._urgency
+
+    @property
+    def affected_users(self):
+        return self._affected_users
+
+    @property
+    def notes(self):
+        return tuple(self._notes)
+
+    @property
+    def resolution(self):
+        return self._resolution
+
+    @property
+    def feedback(self):
+        return self._feedback
 
     # ---------- setup ----------
     def attach_sla(self, tracker):
@@ -113,8 +169,15 @@ class Incident:
     def provide_info(self, actor=None):
         self._act("provide_info", actor)
 
-    def resolve(self, actor=None):
+    def resolve(self, actor=None, resolution=None):
+        text = None
+        if resolution is not None:
+            text = resolution.strip()
+            if not text:
+                raise ValidationError("Resolution text cannot be empty")
         self._act("resolve", actor)
+        if text:
+            self._resolution = text
 
     def verify(self, actor=None):
         self._act("verify", actor)
@@ -124,6 +187,36 @@ class Incident:
 
     def close(self, actor=None):
         self._act("close", actor)
+        # closing frees the technician's capacity (close is only legal once)
+        if self._technician is not None:
+            self._technician.release_incident()
+
+    # ---------- notes and feedback ----------
+    def add_note(self, text, actor=None):
+        actor = actor if actor is not None else SYSTEM
+        self._authorize("add_note", actor)
+        text = (text or "").strip()
+        if not text:
+            raise ValidationError("Note text is required")
+        if self.status == Status.CLOSED:
+            raise InvalidStateTransitionError("Cannot add notes to a closed incident")
+        created = self._clock.now() if self._clock is not None else None
+        self._notes.append(Note(actor.user_id, text, created))
+
+    def submit_feedback(self, actor, rating, comment=""):
+        if actor is None:
+            raise UnauthorizedActionError("Feedback must come from the reporter")
+        self._authorize("submit_feedback", actor)
+        if self.status not in (Status.RESOLVED, Status.VERIFIED, Status.CLOSED):
+            raise InvalidStateTransitionError(
+                f"Cannot give feedback on an incident that is {self.status.value}"
+            )
+        if self._feedback is not None:
+            raise ValidationError("Feedback has already been submitted")
+        if isinstance(rating, bool) or not isinstance(rating, int) or not 1 <= rating <= 5:
+            raise ValidationError("Rating must be a whole number from 1 to 5")
+        created = self._clock.now() if self._clock is not None else None
+        self._feedback = Feedback(rating, (comment or "").strip(), created)
 
     # ---------- internals ----------
     def _authorize(self, action, actor):

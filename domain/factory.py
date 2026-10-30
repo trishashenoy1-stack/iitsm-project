@@ -16,18 +16,34 @@ MAX_DESCRIPTION_LENGTH = 2000
 class IncidentFactory:
     """Creates fully set-up incidents: validated, prioritised, with an SLA."""
 
-    def __init__(self, clock, bus, priority_strategy, sla_policy, first_number=1001):
+    def __init__(
+        self,
+        clock,
+        bus,
+        priority_strategy,
+        sla_policy,
+        first_number=1001,
+        category_registry=None,
+    ):
         self._clock = clock
         self._bus = bus
         self._priority_strategy = priority_strategy
         self._sla_policy = sla_policy
+        self._category_registry = category_registry
         self._counter = itertools.count(first_number)
 
     def set_priority_strategy(self, strategy):
         self._priority_strategy = strategy
 
     def create(
-        self, reporter, service, description, impact, urgency, affected_users=0
+        self,
+        reporter,
+        service,
+        description,
+        impact,
+        urgency,
+        affected_users=0,
+        category=None,
     ):
         if reporter is None or not reporter.is_active:
             raise UnauthorizedActionError("Only active users can report incidents")
@@ -43,6 +59,14 @@ class IncidentFactory:
         if not isinstance(impact, Impact) or not isinstance(urgency, Urgency):
             raise ValidationError("impact and urgency must be Impact / Urgency values")
 
+        category_obj = None
+        if category is not None:
+            if self._category_registry is None:
+                raise ValidationError("No category registry is configured")
+            category_obj = self._category_registry.get(category)
+            if not category_obj.is_active:
+                raise ValidationError(f"Category '{category_obj.name}' is not active")
+
         # calculate first, so a failed creation never uses up an ID
         priority = self._priority_strategy.calculate(
             impact, urgency, service.criticality, affected_users
@@ -56,6 +80,10 @@ class IncidentFactory:
             clock=self._clock,
             reporter=reporter,
             service=service,
+            category=category_obj,
+            impact=impact,
+            urgency=urgency,
+            affected_users=affected_users,
         )
         incident.attach_sla(
             SLATracker(self._clock.now(), priority, self._sla_policy, self._clock)

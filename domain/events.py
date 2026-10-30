@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from domain.enums import Priority, Status
+from domain.sla import SLAEvent
 
 log = logging.getLogger(__name__)
 
@@ -52,6 +53,16 @@ class PriorityChanged(DomainEvent):
     previous_priority: Priority | None
     new_priority: Priority
     reason: str
+
+
+@dataclass(frozen=True)
+class SLAWarning(DomainEvent):
+    sla_event: SLAEvent
+
+
+@dataclass(frozen=True)
+class SLABreached(DomainEvent):
+    sla_event: SLAEvent
 
 
 class EventBus:
