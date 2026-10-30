@@ -5,18 +5,33 @@ from domain.events import (
     StatusChanged,
     TransitionRejected,
 )
-from domain.exceptions import InvalidStateTransitionError, ValidationError
+from domain.exceptions import (
+    InvalidStateTransitionError,
+    UnauthorizedActionError,
+    ValidationError,
+)
+from domain.permissions import check_permission
 from domain.states import NewState
 
 
 class Incident:
-    def __init__(self, incident_id, description, bus=None, clock=None):
+    def __init__(
+        self,
+        incident_id,
+        description,
+        bus=None,
+        clock=None,
+        reporter=None,
+        service=None,
+    ):
         if bus is not None and clock is None:
             raise ValidationError("A clock is required when an event bus is used")
         self._incident_id = incident_id
         self._description = description
         self._bus = bus
         self._clock = clock
+        self._reporter = reporter
+        self._service = service
         self._state = NewState()
         self._sla = None
         self._priority = None
@@ -47,12 +62,21 @@ class Incident:
     def technician(self):
         return self._technician
 
+    @property
+    def reporter(self):
+        return self._reporter
+
+    @property
+    def service(self):
+        return self._service
+
     # ---------- setup ----------
     def attach_sla(self, tracker):
         self._sla = tracker
 
     def set_priority(self, priority, actor=None, reason=""):
         actor = actor if actor is not None else SYSTEM
+        self._authorize("set_priority", actor)
         previous = self._priority
         if self._sla is not None:
             self._sla.change_priority(priority)
@@ -102,8 +126,22 @@ class Incident:
         self._act("close", actor)
 
     # ---------- internals ----------
+    def _authorize(self, action, actor):
+        try:
+            check_permission(action, actor, self)
+        except UnauthorizedActionError as error:
+            self._emit(
+                TransitionRejected,
+                actor,
+                attempted_action=action,
+                current_status=self.status,
+                reason=str(error),
+            )
+            raise
+
     def _act(self, action, actor):
         actor = actor if actor is not None else SYSTEM
+        self._authorize(action, actor)
         previous = self.status
         try:
             getattr(self._state, action)(self)
