@@ -70,6 +70,8 @@ class AssignedState(IncidentState):
     status = Status.ASSIGNED
 
     def acknowledge(self, incident):
+        if incident.sla is not None:
+            incident.sla.record_acknowledged()
         incident._set_state(AcknowledgedState())
 
 
@@ -87,6 +89,8 @@ class InProgressState(IncidentState):
         incident._set_state(AwaitingInfoState())
 
     def resolve(self, incident):
+        if incident.sla is not None:
+            incident.sla.record_resolved()
         incident._set_state(ResolvedState())
 
 
@@ -128,6 +132,10 @@ class ClosedState(IncidentState):
 
 class ReopenedState(IncidentState):
     status = Status.REOPENED
+
+    def on_enter(self, incident):
+        if incident.sla is not None:
+            incident.sla.record_reopened()
 
     def start_work(self, incident):
         incident._set_state(InProgressState())
