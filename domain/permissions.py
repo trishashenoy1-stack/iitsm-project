@@ -14,13 +14,16 @@ ROLE_RULES = {
     "start_work": _TECHNICIAN,
     "request_info": _TECHNICIAN,
     "resolve": _TECHNICIAN,
+    "add_note": _TECHNICIAN,
 }
 
 # only the technician assigned to the incident may do these
-ASSIGNED_TECHNICIAN_ONLY = {"acknowledge", "start_work", "request_info", "resolve"}
+ASSIGNED_TECHNICIAN_ONLY = {
+    "acknowledge", "start_work", "request_info", "resolve", "add_note",
+}
 
 # only the person who reported the incident may do these
-REPORTER_ONLY = {"provide_info", "verify", "reject_resolution"}
+REPORTER_ONLY = {"provide_info", "verify", "reject_resolution", "submit_feedback"}
 
 
 def _same_user(a, b):
@@ -43,7 +46,6 @@ def check_permission(action, actor, incident):
 
     allowed = ROLE_RULES.get(action)
     if allowed is None:
-        # fail closed: an action with no rule is never allowed
         raise UnauthorizedActionError(f"No permission rule for '{action}'")
     if not any(actor.has_role(role) for role in allowed):
         raise UnauthorizedActionError(
