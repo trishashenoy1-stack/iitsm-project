@@ -2,4 +2,12 @@
 __pycache__/
 .pytest_cache/
 *.pyc
-.vscode/
+.vscode/# P4
+.env
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+reports/
+models/*
+!models/README.md
+docs/testing/cases.json
