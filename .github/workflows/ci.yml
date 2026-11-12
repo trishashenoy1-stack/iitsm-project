@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11", cache: pip }
+      - run: pip install ".[dev]"
+      - run: ruff check .
+      - run: mypy
+
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_USER: itsm, POSTGRES_PASSWORD: itsm, POSTGRES_DB: itsm_test }
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U itsm" --health-interval 5s
+          --health-timeout 3s --health-retries 10
+    env:
+      DATABASE_URL: postgresql+psycopg://itsm:itsm@localhost:5432/itsm_test
+      SCHEDULER_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11", cache: pip }
+      - run: pip install --index-url https://download.pytorch.org/whl/cpu torch
+      - run: pip install ".[dev,ml]"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-minilm-v1
+      - name: Unit tests
+        run: pytest --junitxml=reports/unit.xml
+      - name: Integration tests (Postgres)
+        run: pytest -m integration --junitxml=reports/integration.xml
+      - name: Model tests (MiniLM)
+        run: pytest -m model --junitxml=reports/model.xml
+      - name: Test-case catalogue
+        run: python -m scripts.export_test_cases -m "integration or model or not integration"
+        continue-on-error: true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-reports
+          path: |
+            reports/
+            docs/testing/
