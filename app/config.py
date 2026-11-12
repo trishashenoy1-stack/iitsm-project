@@ -43,7 +43,9 @@ class Settings(BaseSettings):
     INTELLIGENCE_ASYNC: bool = True  # False in tests: listener work runs inline
 
     DUP_WINDOW_HOURS: int = 24
-    DUP_THRESHOLD: float = 0.75
+    # Tuned with scripts/eval_duplicates.py (MiniLM, synthetic pairs, seed 42): max F1 on the
+    # dev split. Test split: P 0.885 / R 0.973 / F1 0.927. See docs/metrics/duplicates.md.
+    DUP_THRESHOLD: float = 0.47
     DUP_SAME_SERVICE_BONUS: float = 0.05
     DUP_MIN_CHARS: int = 15
 
