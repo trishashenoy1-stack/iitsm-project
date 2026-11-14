@@ -186,15 +186,17 @@ def _resolved_history(now: datetime) -> list[SeedIncident]:
     return out
 
 
-def PENDING_P2_apply_seed_plan(plan: SeedPlan) -> None:
-    """PENDING_P2: write `plan` through P2's session/models.
+def apply_seed_plan(plan: SeedPlan) -> dict[str, int]:
+    """Write `plan` through P2's services (app/seeding.py): upsert by natural key, so a
+    second run creates no duplicate rows (spec test 20). Passwords come from
+    SEED_PASSWORD and are hashed with Argon2. Deadlines come from P1's SLA tracker."""
+    from app.seeding import apply_seed_plan as write
 
-    Rules: upsert by natural key (user.email, service.name, (service, priority),
-    incident.key) so a second run creates no duplicate rows (spec test 20). Hash
-    passwords with P2's Argon2 helper. Deadlines come from P1's SLA clock, never
-    computed here.
-    """
-    raise NotImplementedError("PENDING_P2: needs P2's models and session")
+    return write(plan)
+
+
+# Kept so existing imports keep working.
+PENDING_P2_apply_seed_plan = apply_seed_plan
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -205,7 +207,7 @@ def main(argv: list[str] | None = None) -> None:
     if args.dry_run:
         print(json.dumps(asdict(plan), default=str, indent=2))
         return
-    PENDING_P2_apply_seed_plan(plan)
+    print(apply_seed_plan(plan))
 
 
 if __name__ == "__main__":

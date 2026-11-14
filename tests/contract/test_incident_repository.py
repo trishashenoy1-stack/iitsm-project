@@ -18,11 +18,16 @@ from tests.fakes.in_memory import FakeEscalationDirectory, FakeIncidentRepositor
 
 
 def PENDING_P2_real_repository(incidents: list[Any]) -> Any:
-    pytest.skip("PENDING_P2: SqlAlchemyIncidentRepository not delivered yet")
+    # P2 (14 Nov): the real repository on SQLite, built in tests/p2/contract_support.py.
+    from tests.p2.contract_support import real_repository
+
+    return real_repository(incidents)
 
 
 def PENDING_P2_real_directory(chain: list[tuple[str, bool]]) -> Any:
-    pytest.skip("PENDING_P2: real EscalationDirectory not delivered yet")
+    from tests.p2.contract_support import real_directory
+
+    return real_directory(chain)
 
 
 REPOS: dict[str, Callable[[list[Any]], Any]] = {
