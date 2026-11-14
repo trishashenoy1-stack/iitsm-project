@@ -114,7 +114,8 @@ def test_admin_reports(w: World) -> None:
 
 @case(id="TC-P2-22", category="normal", desc="Seed script run twice",
       expected="Second run creates no users, services or incidents")
-def test_seed_is_idempotent(w: World) -> None:
+def test_seed_is_idempotent(world_factory: Callable[..., World]) -> None:
+    w = world_factory(with_p4=True)
     plan = build_seed_plan(w.clock.now())
     first = apply_seed_plan(plan, backend=w.backend)
     second = apply_seed_plan(plan, backend=w.backend)
@@ -124,6 +125,11 @@ def test_seed_is_idempotent(w: World) -> None:
         paused = uow.incidents.get(
             next(r.id for r in uow.incidents.search({}) if r.seed_key == "demo-paused"))
         assert paused.status.value == "AWAITING_INFO" and paused.sla.is_paused
+        # P4's detector ran on every seeded incident (it embeds each one). Whether the
+        # planted duplicates link depends on the embedder: MiniLM in Docker, but the
+        # hashing embedder used in tests scores paraphrases below the threshold.
+        ids = [r.id for r in uow.incidents.search({})]
+        assert len(uow.embeddings.get_many(ids)) == len(plan.incidents)
 
 
 @case(id="TC-P2-23", category="business-rule",
@@ -179,8 +185,45 @@ def test_auto_close_and_duplicates(world_factory: Callable[..., World]) -> None:
     w.clock.advance(days=4)
     assert w.backend.p4.scheduler.run_now("auto_close").actions["auto_closed"] == 1
     assert w.client.get(f"/api/incidents/{first}", headers=admin).json()["status"] == "CLOSED"
-    clusters = w.client.get("/api/admin/reports/clusters", headers=admin)
-    assert clusters.status_code == 200
+    clusters = w.client.get("/api/admin/reports/clusters", headers=admin).json()
+    assert clusters == [] or {"serviceId", "service", "incidents"} <= set(clusters[0])
+
+
+def test_clusters_list_open_duplicates(world_factory: Callable[..., World]) -> None:
+    w = world_factory(with_p4=True)
+    emp, admin = w.login("asha@corp.test"), w.login("admin@corp.test")
+    first = w.report(emp)["id"]
+    second = w.report(emp, description="Payment app is down and users cannot complete "
+                                       "transactions")["id"]
+    clusters = w.client.get("/api/admin/reports/clusters", headers=admin).json()
+    assert clusters[0]["service"] == "Payment"
+    assert {i["id"] for i in clusters[0]["incidents"]} == {first, second}
+
+
+def test_suggestions_for_assigned_technician(world_factory: Callable[..., World]) -> None:
+    w = world_factory(with_p4=True)
+    emp, tech, other = (w.login(e) for e in
+                        ("asha@corp.test", "ravi@corp.test", "neha@corp.test"))
+    old = w.report(emp)["id"]
+    for action in ("acknowledge", "start_work"):
+        w.act(tech, old, action)
+    w.act(tech, old, "resolve", "Restarted the payment gateway pods")
+    new = w.report(emp, description="Payment app down again, users cannot complete "
+                                    "transactions")["id"]
+    found = w.client.get(f"/api/incidents/{new}/suggestions", headers=tech).json()
+    assert found[0]["incidentId"] == old and "gateway" in found[0]["resolution"]
+    assert w.client.get(f"/api/incidents/{new}/suggestions", headers=other).status_code == 404
+    assert w.client.get(f"/api/incidents/{new}/suggestions", headers=emp).status_code == 403
+
+
+def test_admin_sets_escalation_level(w: World) -> None:
+    admin = w.login("admin@corp.test")
+    r = w.client.patch("/api/admin/users/T102", headers=admin, json={"escalationLevel": 2})
+    assert r.json()["escalationLevel"] == 2
+    cleared = w.client.patch("/api/admin/users/T102", headers=admin, json={"escalationLevel": 0})
+    assert cleared.json()["escalationLevel"] is None
+    bad = w.client.patch("/api/admin/users/T102", headers=admin, json={"escalationLevel": 7})
+    assert bad.status_code == 422
 
 
 @case(id="TC-P2-25", category="normal",
@@ -206,3 +249,31 @@ def test_round_robin_pointer_survives_restart(w: World) -> None:
     assert w.report(emp)["technician"]["id"] == "T101"
     w2 = w.restart()
     assert w2.report(w2.login("asha@corp.test"))["technician"]["id"] == "T102"
+
+
+def _wait_for(fetch: Callable[[], list[dict[str, object]]], incident_id: str,
+              text: str) -> bool:
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline:
+        if any(n["incidentId"] == incident_id and text in str(n["message"]) for n in fetch()):
+            return True
+        time.sleep(0.05)
+    return False
+
+
+@case(id="TC-P2-28", category="business-rule",
+      desc="Unacknowledged P1 escalates, then runs out of people to escalate to",
+      expected="The team lead is notified of the escalation; admins of the exhausted chain")
+def test_escalation_notifies_target_and_admins(world_factory: Callable[..., World]) -> None:
+    w = world_factory(with_p4=True)
+    with w.client:
+        iid = w.report(w.login("asha@corp.test"))["id"]
+        lead, admin = w.login("lead@corp.test"), w.login("admin@corp.test")
+        w.clock.advance(minutes=6)
+        w.backend.p4.scheduler.run_now("escalation")
+        assert _wait_for(lambda: w.client.get("/api/notifications", headers=lead).json(),
+                         iid, "escalated to you as team lead")
+        w.clock.advance(minutes=6)
+        w.backend.p4.scheduler.run_now("escalation")
+        assert _wait_for(lambda: w.client.get("/api/notifications", headers=admin).json(),
+                         iid, "nobody is left")

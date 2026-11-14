@@ -21,6 +21,7 @@ from app.security import PasswordService, TokenService
 from app.services.accounts import AccountService
 from app.services.admin import AdminService
 from app.services.incidents import IncidentService
+from app.services.notification_rules import BACKEND_RULES
 from app.services.notification_store import SqlNotificationRepository, SqlRecipientDirectory
 from domain.clock import Clock, SystemClock
 from domain.events import EventBus
@@ -63,7 +64,7 @@ class Backend:
                                             production=settings.APP_ENV == "production")
         notifications = NotificationModule(
             bus, SqlRecipientDirectory(session_factory),
-            repository=SqlNotificationRepository(session_factory),
+            repository=SqlNotificationRepository(session_factory), rules=BACKEND_RULES,
         )
         backend = cls(
             settings=settings, engine=engine, session_factory=session_factory, bus=bus,

@@ -9,12 +9,14 @@ import type {
   HistoryEntry,
   Incident,
   IncidentAction,
+  IncidentCluster,
   IncidentFilters,
   Level,
   NewIncident,
   PersonRef,
   Priority,
   ReportOverview,
+  ResolutionSuggestion,
   Role,
   SlaPolicy,
   SlaViolation,
@@ -78,6 +80,7 @@ const users: User[] = [
 ];
 
 const inactiveUsers = new Set<string>();
+const escalationLevels = new Map<string, number>([["A001", 1]]);
 
 type Profile = Omit<TechnicianProfile, "id" | "name" | "activeCount">;
 
@@ -283,6 +286,17 @@ const incidents: Row[] = [
   }),
 ];
 
+// Resolution text for the seeded history, so suggested fixes have something to show.
+const FIXES: Record<string, string> = {
+  DATABASE: "Replica was behind on WAL replay; restarted replication and raised max_wal_senders.",
+  NETWORK: "Access point firmware bug; rebooted the controller and scheduled the upgrade.",
+  AUTHENTICATION: "SAML signing certificate had expired; renewed it on the identity provider.",
+  CLOUD: "Backup job lost its storage credentials; rotated the key and reran the job.",
+  HARDWARE: "Printer driver queue was stuck; cleared the spooler and reinstalled the driver.",
+  SOFTWARE: "Mail relay queue was full; raised the queue limit and flushed deferred mail.",
+  APPLICATION: "Export query had no index on invoice date; added the index and retried.",
+};
+
 // Older incidents for the dashboards, audit log and search. Deterministic, so reports stay stable.
 function seedHistory() {
   const now = Date.now();
@@ -322,7 +336,7 @@ function seedHistory() {
       pausedAt: null,
       respondedAt,
       resolvedAt,
-      resolution: "Fixed and confirmed with the reporter.",
+      resolution: FIXES[categoryOrder[k]] ?? "Fixed and confirmed with the reporter.",
       infoRequest: null,
       feedback: null,
       possibleDuplicates: [],
@@ -496,7 +510,23 @@ function checkCriticality(value: unknown) {
   }
 }
 
-const toAdminUser = (u: User): AdminUser => ({ ...u, active: !inactiveUsers.has(u.id) });
+// Same rule as the API: 0 or empty removes the user from the chain.
+function setEscalationLevel(id: string, level: number | null) {
+  if (level === null || level === 0) {
+    escalationLevels.delete(id);
+    return;
+  }
+  if (!Number.isInteger(level) || level < 1 || level > 3) {
+    throw new MockError(422, "INVALID_INPUT", "Escalation level must be 0 (none), 1, 2 or 3.");
+  }
+  escalationLevels.set(id, level);
+}
+
+const toAdminUser = (u: User): AdminUser => ({
+  ...u,
+  active: !inactiveUsers.has(u.id),
+  escalationLevel: escalationLevels.get(u.id) ?? null,
+});
 
 function toTechnician(id: string): TechnicianProfile {
   return { id, name: ref(id).name, activeCount: activeCount(id), ...profiles.get(id)! };
@@ -641,6 +671,7 @@ export const db = {
       const user: User = { id, name, email, role };
       users.push(user);
       if (role === "TECHNICIAN") profiles.set(id, { skills: [], experienceYears: 0, maxWorkload: 5, available: true });
+      if (input.escalationLevel !== undefined) setEscalationLevel(id, input.escalationLevel);
       return toAdminUser(user);
     },
     updateUser(id: string, changes: Partial<AdminUser>, actor: User) {
@@ -652,6 +683,7 @@ export const db = {
       }
       if (changes.active === false) inactiveUsers.add(id);
       if (changes.active === true) inactiveUsers.delete(id);
+      if (changes.escalationLevel !== undefined) setEscalationLevel(id, changes.escalationLevel);
       return toAdminUser(user);
     },
 
@@ -733,6 +765,23 @@ export const db = {
     violations: () =>
       incidents.flatMap(violationsOf).sort((a, b) => Date.parse(b.deadline) - Date.parse(a.deadline)),
 
+    // Mirrors P4's duplicate clusters: open incidents linked as possible duplicates.
+    clusters(): IncidentCluster[] {
+      const open = incidents.filter((r) => !["RESOLVED", "VERIFIED", "CLOSED"].includes(r.status));
+      return open
+        .filter((r) => r.possibleDuplicates.length > 0)
+        .map((r) => ({
+          serviceId: services.find((s) => s.name === r.service)?.id ?? r.service,
+          service: r.service,
+          incidents: [r, ...r.possibleDuplicates.map((d) => incidents.find((i) => i.id === d.id) ?? { ...r, id: d.id, description: d.description })].map((i) => ({
+            id: i.id,
+            description: i.description,
+            status: i.status,
+            priority: i.priority,
+          })),
+        }));
+    },
+
     overview(): ReportOverview {
       const closedSet: Status[] = ["RESOLVED", "VERIFIED", "CLOSED"];
       const open = incidents.filter((r) => !closedSet.includes(r.status));
@@ -760,6 +809,20 @@ export const db = {
         dailyCreated,
       };
     },
+  },
+
+  // Mirrors P4's suggested resolutions: resolved incidents in the same category.
+  suggestions(id: string, user: User): ResolutionSuggestion[] {
+    const r = find(id);
+    if (user.role === "EMPLOYEE" || !canView(r, user)) {
+      throw new MockError(403, "UNAUTHORIZED_ACTION", "Only the assigned technician can see suggestions.");
+    }
+    const seen = new Set<string>();
+    return incidents
+      .filter((other) => other.id !== r.id && other.category === r.category && other.resolution)
+      .filter((other) => !seen.has(other.resolution!) && seen.add(other.resolution!))
+      .slice(0, 3)
+      .map((other, index) => ({ incidentId: other.id, similarity: 0.82 - index * 0.07, category: other.category, resolution: other.resolution! }));
   },
 
   getIncident(id: string, user: User) {

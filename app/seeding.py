@@ -135,17 +135,40 @@ def apply_seed_plan(plan: Any, backend: Backend | None = None) -> dict[str, int]
                                        .where(IncidentRecord.seed_key.is_not(None))))
 
     admin_id = next(ids[u.email] for u in plan.users if "ADMIN" in u.roles)
+    new_ids = []
     for item in sorted(plan.incidents, key=lambda i: i.created_at):
         if item.key in existing:
             continue
-        _replay(backend, item, ids, services, admin_id)
+        new_ids.append(_replay(backend, item, ids, services, admin_id))
         created["incidents"] += 1
+    _run_intelligence(backend, new_ids)
     log.info("seeded %s", created)
     return created
 
 
+def _run_intelligence(backend: Backend, incident_ids: list[str]) -> None:
+    """Seeding uses a private bus (no notifications), so P4's listener never sees the
+    new incidents. Run it here, so seeded duplicates are linked and embedded."""
+    if not incident_ids:
+        return
+    try:
+        from app.p4_wiring import wire_p4
+
+        settings = backend.settings.model_copy(update={"INTELLIGENCE_ASYNC": False})
+        runtime = wire_p4(settings, bus=EventBus(), uow_factory=backend.uow_factory,
+                          clock=backend.clock, start_scheduler=False)
+    except Exception:
+        log.exception("P4 unavailable; seeded incidents are not checked for duplicates")
+        return
+    try:
+        for incident_id in incident_ids:
+            runtime.listener.handle_created(incident_id)
+    finally:
+        runtime.shutdown()
+
+
 def _replay(backend: Backend, item: Any, ids: dict[str, str],
-            services: dict[str, ServiceRecord], admin_id: str) -> None:
+            services: dict[str, ServiceRecord], admin_id: str) -> str:
     clock = FakeClock(item.created_at)
     # A private bus: seeding must not send anyone notifications or e-mails.
     flow = IncidentService(UnitOfWorkFactory(backend.session_factory, EventBus(), clock))
@@ -169,7 +192,7 @@ def _replay(backend: Backend, item: Any, ids: dict[str, str],
                           "Seed data: set by the service desk")
     reached = ORDER.index(item.status) if item.status in ORDER else -1
     if item.assigned_to is None or reached < 0:
-        return
+        return incident_id
     technician = ids[item.assigned_to]
     at(None, timedelta(minutes=1))
     flow.assign(admin_id, incident_id, technician)
@@ -183,7 +206,7 @@ def _replay(backend: Backend, item: Any, ids: dict[str, str],
         at(None, timedelta(minutes=2))
         flow.act(technician, incident_id, "request_info",
                  "Can you send a screenshot of the error?")
-        return
+        return incident_id
     if reached >= ORDER.index("RESOLVED"):
         at(item.resolved_at, timedelta(minutes=30))
         flow.act(technician, incident_id, "resolve",
@@ -194,3 +217,4 @@ def _replay(backend: Backend, item: Any, ids: dict[str, str],
     if reached >= ORDER.index("CLOSED"):
         at(None, timedelta(minutes=10))
         flow.act(admin_id, incident_id, "close", None)
+    return incident_id

@@ -39,6 +39,19 @@ def _whole(value: Any, minimum: int, message: str) -> int:
     return value
 
 
+def _escalation_level(value: Any) -> int | None:
+    """0 or empty removes the user from the escalation chain."""
+    if value in (None, 0):
+        return None
+    if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 3:
+        raise ValidationError("Escalation level must be 0 (none), 1, 2 or 3.")
+    return value
+
+
+def admin_user_out(row: UserRecord) -> dict[str, Any]:
+    return {**user_out(row), "active": row.active, "escalationLevel": row.escalation_level}
+
+
 def technician_out(row: UserRecord, active: int) -> dict[str, Any]:
     profile = row.technician
     return {
@@ -67,7 +80,7 @@ class AdminService:
     # ---- users ----------------------------------------------------------------------
     def list_users(self) -> list[dict[str, Any]]:
         with self._uow_factory() as uow:
-            return [{**user_out(u), "active": u.active} for u in uow.users.all()]
+            return [admin_user_out(u) for u in uow.users.all()]
 
     def create_user(self, data: dict[str, Any]) -> dict[str, Any]:
         name = (data.get("name") or "").strip()
@@ -90,9 +103,11 @@ class AdminService:
             if role == Role.TECHNICIAN:
                 row.technician = TechnicianRecord(skills=[], experience_years=0,
                                                   max_workload=5, available=True)
+            if data.get("escalationLevel") is not None:
+                row.escalation_level = _escalation_level(data["escalationLevel"])
             uow.users.add(row)
             uow.commit()
-            return {**user_out(row), "active": True}
+            return admin_user_out(row)
 
     def update_user(self, actor_id: str, user_id: str, changes: dict[str, Any]) -> dict[str, Any]:
         with self._uow_factory() as uow:
@@ -107,11 +122,9 @@ class AdminService:
                     raise ConflictError("You can't deactivate your own account.")
                 row.active = bool(changes["active"])
             if "escalationLevel" in changes:
-                level = changes["escalationLevel"]
-                row.escalation_level = None if level in (None, 0) else _whole(
-                    level, 1, "Escalation level must be 1, 2 or 3.")
+                row.escalation_level = _escalation_level(changes["escalationLevel"])
             uow.commit()
-            return {**user_out(row), "active": row.active}
+            return admin_user_out(row)
 
     # ---- technicians ----------------------------------------------------------------
     def list_technicians(self) -> list[dict[str, Any]]:
@@ -254,6 +267,23 @@ class AdminService:
                 "action": s.action, "description": s.description,
                 "previousStatus": s.previous_status, "newStatus": s.new_status,
             } for s in uow.audit.latest(limit=limit, incident_id=incident_id)]
+
+    def describe_clusters(self, clusters: dict[str, list[frozenset[str]]]) -> list[dict[str, Any]]:
+        """Turn P4's {service_id: [{incident ids}]} into rows the dashboard can show."""
+        with self._uow_factory() as uow:
+            names = {s.id: s.name for s in uow.services.all()}
+            result = []
+            for service_id, groups in clusters.items():
+                for group in groups:
+                    rows = sorted((uow.incidents.record(i) for i in group),
+                                  key=lambda r: r.created_at)
+                    result.append({
+                        "serviceId": service_id, "service": names.get(service_id, service_id),
+                        "incidents": [{"id": r.id, "description": r.description,
+                                       "status": r.status, "priority": r.priority}
+                                      for r in rows],
+                    })
+            return sorted(result, key=lambda c: -len(c["incidents"]))
 
     def violations(self) -> list[dict[str, Any]]:
         with self._uow_factory() as uow:

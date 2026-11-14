@@ -78,6 +78,7 @@ function adminRoutes() {
     list("audit-log", a.audit),
     list("sla-violations", a.violations),
     list("reports/overview", a.overview),
+    list("reports/clusters", a.clusters),
   ];
 }
 
@@ -124,6 +125,7 @@ export const handlers = [
     const { rating, comment } = (await request.json()) as { rating: number; comment: string };
     return db.submitFeedback(params.id, currentUser(request), rating, comment);
   })),
+  http.get("/api/incidents/:id/suggestions", route(({ request, params }) => db.suggestions(params.id, currentUser(request)))),
   http.get("/api/incidents/:id", route(({ request, params }) => db.getIncident(params.id, currentUser(request)))),
   http.post("/api/incidents/:id/actions/:action", route(async ({ request, params }) => {
     const { message } = (await request.json()) as { message?: string };

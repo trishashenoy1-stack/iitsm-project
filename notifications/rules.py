@@ -22,6 +22,7 @@ class Audience(Enum):
     ASSIGNED_TECHNICIAN = auto()  # the technician named on the event itself
     ADMINISTRATORS = auto()
     TECHNICIAN_OR_ADMINISTRATORS = auto()  # admins cover unassigned incidents
+    TARGET_USER = auto()  # the user named in the event's ``to_user_id`` (escalation)
 
 
 @dataclass(frozen=True)

@@ -23,6 +23,7 @@ export function UsersPage() {
         { header: "Name", cell: (u) => u.name },
         { header: "Email", cell: (u) => u.email },
         { header: "Role", cell: (u) => titleCase(u.role) },
+        { header: "Escalation", cell: (u) => (u.escalationLevel ? ESCALATION_LABEL[u.escalationLevel] : "None") },
         { header: "Status", cell: (u) => <OnOff on={u.active} /> },
       ]}
       fields={[
@@ -40,10 +41,13 @@ export function UsersPage() {
             { value: "ADMIN", label: "Admin" },
           ],
         },
+        { key: "escalationLevel", label: "Escalation (0 none, 1 lead, 2 sysadmin, 3 manager)", kind: "number", min: 0, max: 3 },
       ]}
     />
   );
 }
+
+const ESCALATION_LABEL: Record<number, string> = { 1: "Team lead", 2: "System admin", 3: "IT manager" };
 
 export function TechniciansPage() {
   return (

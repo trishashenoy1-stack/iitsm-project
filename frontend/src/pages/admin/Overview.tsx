@@ -3,6 +3,8 @@ import type { ReactNode } from "react";
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Link } from "react-router-dom";
 import { api } from "../../api/client";
+import { PriorityTag } from "../../components/IncidentBits";
+import { STATUS_LABEL } from "../../lib/format";
 
 const TICK = { fill: "var(--color-fg-2)", fontSize: 12 };
 const BAR = "var(--color-fg-2)";
@@ -58,6 +60,49 @@ function Metric({ label, value, tone, to }: { label: string; value: number; tone
 }
 
 const shortDate = (iso: string) => new Date(iso).toLocaleDateString([], { day: "numeric", month: "short" });
+
+function Clusters() {
+  const { data, error } = useQuery({ queryKey: ["admin", "clusters"], queryFn: api.admin.clusters, refetchInterval: 30000 });
+  return (
+    <section className="card min-w-0 px-5 py-4 xl:col-span-5">
+      <h2 className="text-[15px] font-medium">Possible duplicates</h2>
+      <p className="mb-3 text-[13px] text-fg-2">
+        {error
+          ? error.message
+          : !data
+            ? "Loading"
+            : data.length
+              ? `${data.length} ${data.length === 1 ? "group" : "groups"} of open incidents that look like the same problem.`
+              : "No open incidents look like duplicates of each other."}
+      </p>
+      {data && data.length > 0 && (
+        <ul className="grid gap-3 md:grid-cols-2">
+          {data.map((cluster) => (
+            <li key={cluster.incidents.map((i) => i.id).join()} className="rounded-lg border border-line px-3.5 py-3">
+              <p className="text-xs text-fg-3">
+                {cluster.service} · {cluster.incidents.length} incidents
+              </p>
+              <ul className="mt-1.5 grid gap-1.5 text-[13px]">
+                {cluster.incidents.map((incident) => (
+                  <li key={incident.id} className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-2">
+                    <PriorityTag priority={incident.priority} />
+                    <span className="min-w-0">
+                      <Link to={`/admin/incidents/${incident.id}`} className="font-mono text-xs underline-offset-2 hover:underline">
+                        {incident.id}
+                      </Link>{" "}
+                      <span className="text-fg-2">{incident.description}</span>{" "}
+                      <span className="text-xs text-fg-3">({STATUS_LABEL[incident.status]})</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
 
 export function Overview() {
   const { data, isPending, error } = useQuery({ queryKey: ["admin", "overview"], queryFn: api.admin.overview, refetchInterval: 15000 });
@@ -141,6 +186,8 @@ export function Overview() {
           </BarChart>
         </ResponsiveContainer>
       </Panel>
+
+      <Clusters />
     </main>
   );
 }

@@ -328,11 +328,11 @@ def overview(app: Backend = Depends(backend)) -> dict[str, Any]:
 
 
 @admin.get("/reports/clusters", tags=["intelligence"])
-def clusters(app: Backend = Depends(backend)) -> dict[str, list[list[str]]]:
+def clusters(app: Backend = Depends(backend)) -> list[dict[str, Any]]:
+    """P4's duplicate clusters (last DUP_WINDOW_HOURS), with what the dashboard shows."""
     if app.p4 is None:
-        return {}
-    return {service: [sorted(c) for c in groups]
-            for service, groups in app.p4.clusters().items()}
+        return []
+    return app.admin.describe_clusters(app.p4.clusters())
 
 
 @admin.post("/jobs/{name}/run", tags=["jobs"])

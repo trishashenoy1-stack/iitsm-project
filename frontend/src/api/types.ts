@@ -68,6 +68,21 @@ export interface PossibleDuplicate {
   similarity: number;
 }
 
+/** A resolved incident whose fix may apply here (P4's kNN over resolved incidents). */
+export interface ResolutionSuggestion {
+  incidentId: string;
+  similarity: number;
+  category: string | null;
+  resolution: string;
+}
+
+/** Open incidents P4's duplicate detector linked together, for one service. */
+export interface IncidentCluster {
+  serviceId: string;
+  service: string;
+  incidents: { id: string; description: string; status: Status; priority: Priority }[];
+}
+
 export interface Feedback {
   rating: number;
   comment: string;
@@ -132,6 +147,8 @@ export interface IncidentFilters {
 
 export interface AdminUser extends User {
   active: boolean;
+  /** Place in the escalation chain: 1 team lead, 2 system admin, 3 IT manager. */
+  escalationLevel: number | null;
   /** Write-only: the starting password an admin sets when creating an account. */
   password?: string;
 }

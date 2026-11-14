@@ -78,6 +78,10 @@ class NotificationService:
             return [contact] if contact else []
         if audience is Audience.ADMINISTRATORS:
             return self._directory.administrators()
+        if audience is Audience.TARGET_USER:
+            user_id = getattr(event, "to_user_id", None)
+            contact = self._directory.contact(user_id) if user_id else None
+            return [contact] if contact else []
         if parties.technician:
             return [parties.technician]
         return self._directory.administrators()

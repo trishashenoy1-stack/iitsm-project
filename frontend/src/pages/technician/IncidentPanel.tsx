@@ -35,6 +35,14 @@ export function IncidentPanel({ id }: { id: string }) {
     refetchInterval: 5000,
   });
 
+  const done = incident?.status === "RESOLVED" || incident?.status === "VERIFIED" || incident?.status === "CLOSED";
+  const suggestions = useQuery({
+    queryKey: ["suggestions", id],
+    queryFn: () => api.suggestions(id),
+    enabled: incident !== undefined && !done,
+    staleTime: 60_000,
+  });
+
   const mutation = useMutation({
     mutationFn: (run: () => Promise<Incident>) => run(),
     onSuccess: (updated) => {
@@ -164,6 +172,37 @@ export function IncidentPanel({ id }: { id: string }) {
               ))}
             </dl>
           </section>
+          {suggestions.data && (
+            <section className="card px-4 py-3.5">
+              <h2 className="label">Suggested fixes</h2>
+              <p className="mt-1 text-xs text-fg-3">
+                {suggestions.data.length ? "From similar incidents that were resolved before." : "No similar resolved incidents yet."}
+              </p>
+              <ul className="mt-2 grid gap-2.5 text-[13px]">
+                {suggestions.data.map((s) => (
+                  <li key={s.incidentId}>
+                    <span className="wrap-anywhere">{s.resolution}</span>
+                    <small className="block font-mono text-xs text-fg-3">
+                      {s.incidentId} · {Math.round(s.similarity * 100)}% similar
+                    </small>
+                    {incident.status === "IN_PROGRESS" && (
+                      <button
+                        className="mt-1 text-xs text-fg-2 underline underline-offset-2 hover:text-fg"
+                        onClick={() => {
+                          setMode("resolve");
+                          setDraft(s.resolution);
+                          setError("");
+                          document.getElementById("incident-composer")?.focus();
+                        }}
+                      >
+                        Use as resolution
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
           {incident.possibleDuplicates.length > 0 && (
             <section className="card px-4 py-3.5">
               <h2 className="label">Possible duplicates</h2>
