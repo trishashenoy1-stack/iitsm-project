@@ -20,9 +20,19 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     # --- shared -------------------------------------------------------------------
-    # PENDING_P2: P2 owns the DB URL format and session setup. The default only exists so
-    # unit tests and scripts can build Settings without a .env file.
-    DATABASE_URL: str = "sqlite+pysqlite:///:memory:"
+    # P2: SQLAlchemy URL. Docker sets postgresql+psycopg://...; the default is a local
+    # SQLite file so `uvicorn app.main:app` works with no setup.
+    DATABASE_URL: str = "sqlite+pysqlite:///./iitsm-dev.db"
+
+    # --- P2: API and security -------------------------------------------------------
+    APP_ENV: Literal["development", "production", "test"] = "development"
+    # Required in production (at least 32 characters). Never commit a real value.
+    JWT_SECRET: str = ""
+    JWT_EXPIRE_MINUTES: int = 120
+    # The Vite dev server proxies /api, so CORS is only needed for other origins.
+    CORS_ORIGINS: list[str] = ["http://localhost:5173"]
+    # Create tables on start when there is no Alembic run (local SQLite, tests).
+    CREATE_TABLES_ON_START: bool = True
 
     # --- P4: background jobs ------------------------------------------------------
     SCHEDULER_ENABLED: bool = True
