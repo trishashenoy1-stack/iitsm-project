@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
 
-from domain.exceptions import NoEligibleTechnicianError, ValidationError
-
+from domain.exceptions import NoEligibleTechnicianError
 
 class AssignmentStrategy(ABC):
     @abstractmethod
@@ -14,11 +13,12 @@ class AssignmentStrategy(ABC):
 
 
 class SkillBasedStrategy(AssignmentStrategy):
-    """Skilled technicians only; most experienced first, then lighter load, then id."""
+    """Skilled technicians only; most experienced first, then lighter load, then id.
+    With no skill given (a 'not sure' category) it falls back to least loaded."""
 
     def select(self, technicians, required_skill=None):
         if not required_skill:
-            raise ValidationError("SkillBasedStrategy needs a required_skill")
+            return LoadBasedStrategy().select(technicians)
         candidates = [
             t for t in self._eligible(technicians) if t.has_skill(required_skill)
         ]

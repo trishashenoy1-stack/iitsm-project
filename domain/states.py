@@ -1,6 +1,5 @@
 from domain.enums import Status
-from domain.exceptions import InvalidStateTransitionError
-
+from domain.exceptions import InvalidStateTransitionError, ValidationError
 
 class IncidentState:
     """Base state: every action is refused unless a subclass allows it."""
@@ -139,3 +138,28 @@ class ReopenedState(IncidentState):
 
     def start_work(self, incident):
         incident._set_state(InProgressState())
+
+
+
+STATE_BY_STATUS = {
+    Status.NEW: NewState,
+    Status.CLASSIFIED: ClassifiedState,
+    Status.ASSIGNED: AssignedState,
+    Status.ACKNOWLEDGED: AcknowledgedState,
+    Status.IN_PROGRESS: InProgressState,
+    Status.AWAITING_INFO: AwaitingInfoState,
+    Status.RESOLVED: ResolvedState,
+    Status.VERIFIED: VerifiedState,
+    Status.CLOSED: ClosedState,
+    Status.REOPENED: ReopenedState,
+}
+
+
+def state_for(status):
+    """Return a fresh state object for a saved status (a Status or its text)."""
+    try:
+        if isinstance(status, str):
+            status = Status(status)
+        return STATE_BY_STATUS[status]()
+    except (KeyError, ValueError, TypeError) as error:
+        raise ValidationError(f"Unknown incident status: {status!r}") from error

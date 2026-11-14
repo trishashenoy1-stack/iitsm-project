@@ -96,3 +96,12 @@ class Technician(User):
     def release_incident(self):
         if self._active_count > 0:
             self._active_count -= 1
+
+
+    def restore_state(self, active_count, available=True, active=True):
+        """Used when loading a technician back from storage."""
+        if active_count < 0:
+            raise ValidationError("active_count cannot be negative")
+        self._active_count = active_count
+        self._available = available
+        self._active = active

@@ -10,7 +10,6 @@ from domain.enums import Status
 from domain.exceptions import (
     InvalidStateTransitionError,
     NoEligibleTechnicianError,
-    ValidationError,
 )
 from domain.incident import Incident
 from domain.users import Technician
@@ -46,9 +45,10 @@ def test_skill_tie_goes_to_lighter_load_then_id():
     assert SkillBasedStrategy().select([a, b, c], "network") is b
 
 
-def test_skill_requires_a_skill_name():
-    with pytest.raises(ValidationError):
-        SkillBasedStrategy().select([tech("A")], None)
+def test_skill_without_a_skill_name_falls_back_to_least_loaded():
+    a = busy(tech("A"))
+    b = tech("B")
+    assert SkillBasedStrategy().select([a, b], None) is b
 
 
 def test_skill_nobody_has_it():
