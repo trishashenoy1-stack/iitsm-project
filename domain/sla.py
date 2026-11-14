@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 from enum import Enum
 
 from domain.enums import Priority
@@ -57,6 +57,71 @@ class SLATracker:
         self._resolution_elapsed = None
         self._flags = set()
         self._targets()  # fail early if no SLA can be found
+
+    # ---------- saving and loading ----------
+    def snapshot(self):
+        """Plain data (strings, numbers, lists) that can be stored in a database."""
+        return {
+            "created_at": self._created_at.isoformat(),
+            "priority": self._priority.name,
+            "warning_ratio": self._warning_ratio,
+            "paused_total_seconds": self._paused_total.total_seconds(),
+            "paused_at": self._paused_at.isoformat() if self._paused_at else None,
+            "response_elapsed_seconds": (
+                None if self._response_elapsed is None
+                else self._response_elapsed.total_seconds()
+            ),
+            "resolution_elapsed_seconds": (
+                None if self._resolution_elapsed is None
+                else self._resolution_elapsed.total_seconds()
+            ),
+            "flags": sorted(flag.name for flag in self._flags),
+        }
+
+    @classmethod
+    def restore(cls, data, policy, clock):
+        """Rebuild a tracker from snapshot() data (for example after a restart)."""
+        try:
+            created_at = datetime.fromisoformat(data["created_at"])
+            priority = Priority[data["priority"]]
+            warning_ratio = float(data.get("warning_ratio", 0.8))
+            paused_total = timedelta(seconds=float(data["paused_total_seconds"]))
+            paused_at = cls._parse_optional_time(data.get("paused_at"))
+            response = cls._parse_optional_seconds(data.get("response_elapsed_seconds"))
+            resolution = cls._parse_optional_seconds(
+                data.get("resolution_elapsed_seconds")
+            )
+            flags = {SLAEvent[name] for name in data.get("flags", [])}
+        except (KeyError, ValueError, TypeError) as error:
+            raise ValidationError(f"Invalid SLA snapshot: {error}") from error
+        if paused_total < timedelta(0):
+            raise ValidationError("paused_total_seconds cannot be negative")
+
+        tracker = cls(created_at, priority, policy, clock, warning_ratio)
+        tracker._paused_total = paused_total
+        tracker._paused_at = paused_at
+        tracker._response_elapsed = response
+        tracker._resolution_elapsed = resolution
+        tracker._flags = flags
+        return tracker
+
+    @staticmethod
+    def _parse_optional_time(value):
+        if value is None:
+            return None
+        parsed = datetime.fromisoformat(value)
+        if parsed.tzinfo is None:
+            raise ValueError("timestamps in a snapshot must be timezone-aware")
+        return parsed
+
+    @staticmethod
+    def _parse_optional_seconds(value):
+        if value is None:
+            return None
+        seconds = float(value)
+        if seconds < 0:
+            raise ValueError("elapsed seconds cannot be negative")
+        return timedelta(seconds=seconds)
 
     # ---------- reading ----------
     @property
@@ -123,7 +188,6 @@ class SLATracker:
 
     def evaluate(self):
         """Return each warning/breach exactly once, even if called late."""
-        now = self._clock.now()
         response_target, resolution_target = self._targets()
         events = []
 
