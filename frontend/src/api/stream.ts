@@ -28,6 +28,10 @@ export function createSseParser(onFrame: (frame: SseFrame) => void) {
 }
 
 const MAX_RETRY_MS = 30000;
+// The server sends a keep-alive every 15 s. Three missed in a row means the connection
+// is dead even if the browser hasn't noticed (sleep, Wi-Fi change, a proxy that keeps
+// the browser side open after the server went away), so drop it and reconnect.
+const SILENCE_LIMIT_MS = 45000;
 
 interface StreamHandlers {
   onConnected: () => void;
@@ -46,10 +50,19 @@ export function openNotificationStream({ onConnected, onNotification }: StreamHa
 
   async function connect() {
     while (!controller.signal.aborted) {
+      // One controller per attempt, so the watchdog can drop this connection only.
+      const attempt = new AbortController();
+      const stop = () => attempt.abort();
+      controller.signal.addEventListener("abort", stop);
+      let watchdog = setTimeout(stop, SILENCE_LIMIT_MS);
+      const heard = () => {
+        clearTimeout(watchdog);
+        watchdog = setTimeout(stop, SILENCE_LIMIT_MS);
+      };
       try {
         const token = tokenStore.get();
         const response = await fetch("/api/notifications/stream", {
-          signal: controller.signal,
+          signal: attempt.signal,
           headers: {
             Accept: "text/event-stream",
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -69,11 +82,15 @@ export function openNotificationStream({ onConnected, onNotification }: StreamHa
           for (;;) {
             const { done, value } = await reader.read();
             if (done) break;
+            heard();
             parse(decoder.decode(value, { stream: true }));
           }
         }
       } catch {
         if (controller.signal.aborted) return;
+      } finally {
+        clearTimeout(watchdog);
+        controller.signal.removeEventListener("abort", stop);
       }
       await new Promise((resolve) => setTimeout(resolve, retryMs));
       retryMs = Math.min(retryMs * 2, MAX_RETRY_MS);
