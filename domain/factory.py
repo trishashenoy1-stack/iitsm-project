@@ -24,12 +24,16 @@ class IncidentFactory:
         sla_policy,
         first_number=1001,
         category_registry=None,
+        warning_ratio=0.8,
     ):
+        if not 0 < warning_ratio < 1:
+            raise ValidationError("warning_ratio must be between 0 and 1")
         self._clock = clock
         self._bus = bus
         self._priority_strategy = priority_strategy
         self._sla_policy = sla_policy
         self._category_registry = category_registry
+        self._warning_ratio = warning_ratio
         self._counter = itertools.count(first_number)
 
     def set_priority_strategy(self, strategy):
@@ -86,7 +90,13 @@ class IncidentFactory:
             affected_users=affected_users,
         )
         incident.attach_sla(
-            SLATracker(self._clock.now(), priority, self._sla_policy, self._clock)
+            SLATracker(
+                self._clock.now(),
+                priority,
+                self._sla_policy,
+                self._clock,
+                self._warning_ratio,
+            )
         )
 
         if self._bus is not None:

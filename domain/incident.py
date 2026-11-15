@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from domain.enums import Status
 from domain.events import (
@@ -14,7 +14,7 @@ from domain.exceptions import (
     ValidationError,
 )
 from domain.permissions import check_permission
-from domain.states import NewState
+from domain.states import NewState, state_for
 
 
 @dataclass(frozen=True)
@@ -29,6 +29,16 @@ class Feedback:
     rating: int
     comment: str
     created_at: object
+
+
+@dataclass(frozen=True)
+class InfoRequest:
+    question: str
+    asked_by_id: object
+    asked_at: object
+    answer: object = None
+    answered_by_id: object = None
+    answered_at: object = None
 
 
 class Incident:
@@ -64,6 +74,73 @@ class Incident:
         self._notes = []
         self._resolution = None
         self._feedback = None
+        self._info_requests = []
+        self._created_at = clock.now() if clock is not None else None
+        self._resolved_at = None
+        self._closed_at = None
+
+    # ---------- loading from storage ----------
+    @classmethod
+    def restore(
+        cls,
+        incident_id,
+        description,
+        status,
+        *,
+        reporter=None,
+        service=None,
+        category=None,
+        impact=None,
+        urgency=None,
+        affected_users=0,
+        priority=None,
+        technician=None,
+        notes=(),
+        resolution=None,
+        feedback=None,
+        info_requests=(),
+        created_at=None,
+        resolved_at=None,
+        closed_at=None,
+        sla=None,
+        bus=None,
+        clock=None,
+    ):
+        """Rebuild an incident from saved values.
+        Publishes no events and runs no transition checks."""
+        for label, value in (
+            ("created_at", created_at),
+            ("resolved_at", resolved_at),
+            ("closed_at", closed_at),
+        ):
+            if value is not None and getattr(value, "tzinfo", None) is None:
+                raise ValidationError(f"{label} must be a timezone-aware datetime")
+        state = state_for(status)
+
+        incident = cls(
+            incident_id,
+            description,
+            bus=bus,
+            clock=clock,
+            reporter=reporter,
+            service=service,
+            category=category,
+            impact=impact,
+            urgency=urgency,
+            affected_users=affected_users,
+        )
+        incident._state = state
+        incident._priority = priority
+        incident._technician = technician
+        incident._notes = list(notes)
+        incident._resolution = resolution
+        incident._feedback = feedback
+        incident._info_requests = list(info_requests)
+        incident._created_at = created_at
+        incident._resolved_at = resolved_at
+        incident._closed_at = closed_at
+        incident._sla = sla
+        return incident
 
     # ---------- reading ----------
     @property
@@ -126,6 +203,22 @@ class Incident:
     def feedback(self):
         return self._feedback
 
+    @property
+    def info_requests(self):
+        return tuple(self._info_requests)
+
+    @property
+    def created_at(self):
+        return self._created_at
+
+    @property
+    def resolved_at(self):
+        return self._resolved_at
+
+    @property
+    def closed_at(self):
+        return self._closed_at
+
     # ---------- setup ----------
     def attach_sla(self, tracker):
         self._sla = tracker
@@ -163,11 +256,25 @@ class Incident:
     def start_work(self, actor=None):
         self._act("start_work", actor)
 
-    def request_info(self, actor=None):
+    def request_info(self, actor=None, question=None):
+        actor = actor if actor is not None else SYSTEM
+        text = self._clean_optional_text(question, "Question")
         self._act("request_info", actor)
+        if text:
+            self._info_requests.append(
+                InfoRequest(
+                    question=text,
+                    asked_by_id=actor.user_id,
+                    asked_at=self._now(),
+                )
+            )
 
-    def provide_info(self, actor=None):
+    def provide_info(self, actor=None, answer=None):
+        actor = actor if actor is not None else SYSTEM
+        text = self._clean_optional_text(answer, "Answer")
         self._act("provide_info", actor)
+        if text:
+            self._record_answer(text, actor)
 
     def resolve(self, actor=None, resolution=None):
         text = None
@@ -176,6 +283,7 @@ class Incident:
             if not text:
                 raise ValidationError("Resolution text cannot be empty")
         self._act("resolve", actor)
+        self._resolved_at = self._now()
         if text:
             self._resolution = text
 
@@ -184,9 +292,11 @@ class Incident:
 
     def reject_resolution(self, actor=None):
         self._act("reject_resolution", actor)
+        self._resolved_at = None
 
     def close(self, actor=None):
         self._act("close", actor)
+        self._closed_at = self._now()
         # closing frees the technician's capacity (close is only legal once)
         if self._technician is not None:
             self._technician.release_incident()
@@ -200,8 +310,7 @@ class Incident:
             raise ValidationError("Note text is required")
         if self.status == Status.CLOSED:
             raise InvalidStateTransitionError("Cannot add notes to a closed incident")
-        created = self._clock.now() if self._clock is not None else None
-        self._notes.append(Note(actor.user_id, text, created))
+        self._notes.append(Note(actor.user_id, text, self._now()))
 
     def submit_feedback(self, actor, rating, comment=""):
         if actor is None:
@@ -215,10 +324,45 @@ class Incident:
             raise ValidationError("Feedback has already been submitted")
         if isinstance(rating, bool) or not isinstance(rating, int) or not 1 <= rating <= 5:
             raise ValidationError("Rating must be a whole number from 1 to 5")
-        created = self._clock.now() if self._clock is not None else None
-        self._feedback = Feedback(rating, (comment or "").strip(), created)
+        self._feedback = Feedback(rating, (comment or "").strip(), self._now())
 
     # ---------- internals ----------
+    def _now(self):
+        return self._clock.now() if self._clock is not None else None
+
+    @staticmethod
+    def _clean_optional_text(value, label):
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValidationError(f"{label} must be text")
+        text = value.strip()
+        if not text:
+            raise ValidationError(f"{label} cannot be empty")
+        return text
+
+    def _record_answer(self, text, actor):
+        now = self._now()
+        for index in range(len(self._info_requests) - 1, -1, -1):
+            if self._info_requests[index].answer is None:
+                self._info_requests[index] = replace(
+                    self._info_requests[index],
+                    answer=text,
+                    answered_by_id=actor.user_id,
+                    answered_at=now,
+                )
+                return
+        self._info_requests.append(
+            InfoRequest(
+                question="",
+                asked_by_id=None,
+                asked_at=None,
+                answer=text,
+                answered_by_id=actor.user_id,
+                answered_at=now,
+            )
+        )
+
     def _authorize(self, action, actor):
         try:
             check_permission(action, actor, self)
