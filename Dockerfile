@@ -20,13 +20,14 @@ ENV HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1
 # --- source -----------------------------------------------------------------------
 COPY domain ./domain
 COPY app ./app
+COPY notifications ./notifications
 COPY scripts ./scripts
 COPY data ./data
 COPY models ./models
 COPY docker/entrypoint.sh ./entrypoint.sh
-# alembic/ + alembic.ini are P2's; copied if present (PENDING_P2). pyproject.toml is
-# listed so the glob always has at least one match.
-COPY pyproject.toml alembic* ./
+# P2's migrations (run by entrypoint.sh before the server starts).
+COPY pyproject.toml alembic.ini ./
+COPY alembic ./alembic
 
 RUN useradd --create-home --uid 1000 itsm && chown -R itsm /app /opt/hf
 USER itsm

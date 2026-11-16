@@ -15,6 +15,8 @@ dependencies = [
     "numpy>=1.26",
     "scikit-learn>=1.4",
     "joblib>=1.4",
+    "argon2-cffi>=23.1",
+    "pyjwt>=2.8",
 ]
 
 [project.optional-dependencies]
@@ -30,7 +32,7 @@ dev = [
 ]
 
 [tool.setuptools.packages.find]
-include = ["app*", "domain*"]
+include = ["app*", "domain*", "notifications*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -45,7 +47,7 @@ line-length = 100
 target-version = "py311"
 # PENDING_P1: P1's files aren't ruff-clean yet (14 findings, 12 auto-fixable with
 # `ruff check --fix`). Remove this once P1 has run it on their own branch.
-extend-exclude = ["domain", "play.py", "tests/test_*.py"]
+extend-exclude = ["domain", "play.py", "tests/test_*.py", "alembic/versions"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "SIM"]
