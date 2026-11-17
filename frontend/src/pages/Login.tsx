@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type PointerEvent } from "react";
 import { Navigate } from "react-router-dom";
 import { ApiError } from "../api/client";
 import { homeFor, useAuth } from "../auth/AuthContext";
@@ -29,6 +29,15 @@ function useIsWide() {
   return wide;
 }
 
+/** A short horizontal shake for a failed sign-in. Keeps focus and typed values in place. */
+function shake(element: HTMLElement | null) {
+  if (!element || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  element.animate(
+    [0, -5, 4, -3, 2, 0].map((x) => ({ transform: `translateX(${x}px)` })),
+    { duration: 360, easing: "ease-in-out" },
+  );
+}
+
 export function Login() {
   const { user, loading, signIn, register } = useAuth();
   const wide = useIsWide();
@@ -37,6 +46,8 @@ export function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const form = useRef<HTMLFormElement>(null);
+  const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
 
   if (loading) return null;
@@ -49,6 +60,7 @@ export function Login() {
       await action();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Something went wrong. Try again.");
+      shake(form.current);
     } finally {
       setBusy(false);
     }
@@ -59,19 +71,35 @@ export function Login() {
     run(() => (registering ? register(name, email, password) : signIn(email, password)));
   }
 
+  // Moves the soft light behind the form. Writes CSS variables, so React doesn't re-render.
+  function trackPointer(event: PointerEvent<HTMLDivElement>) {
+    const box = event.currentTarget.getBoundingClientRect();
+    event.currentTarget.style.setProperty("--mx", `${event.clientX - box.left}px`);
+    event.currentTarget.style.setProperty("--my", `${event.clientY - box.top}px`);
+  }
+
+  const title = registering ? "Create your account" : "Welcome back";
+
   return (
     <main className="grid min-h-dvh lg:grid-cols-[minmax(400px,5fr)_8fr]">
-      <div className="flex flex-col justify-center px-6 py-10 sm:px-12 xl:px-20">
+      <div className="login-pane flex flex-col justify-center px-6 py-10 sm:px-12 xl:px-20" onPointerMove={trackPointer}>
         <div className="mx-auto w-full max-w-[380px]">
-          <p className="enter mb-10 font-semibold tracking-tight">I-ITSM</p>
-          <h1 className="enter text-[36px] leading-tight font-medium tracking-[-0.025em]" style={{ animationDelay: "60ms" }}>
-            {registering ? "Create your account" : "Sign in"}
+          <p className="enter mb-10 flex items-center gap-2.5 font-semibold tracking-tight">
+            <span className="logo-mark" aria-hidden="true" />
+            I-ITSM
+          </p>
+          <h1 key={title} aria-label={title} className="text-[38px] leading-[1.1] font-medium tracking-[-0.03em]">
+            {title.split(" ").map((word, index) => (
+              <span key={index} aria-hidden="true" className="word mr-[0.25em]" style={{ animationDelay: `${60 + index * 70}ms` }}>
+                {word}
+              </span>
+            ))}
           </h1>
-          <p className="enter mt-1 text-fg-2" style={{ animationDelay: "120ms" }}>
+          <p key={`${title}-sub`} className="enter mt-2 text-fg-2" style={{ animationDelay: "200ms" }}>
             {registering ? "Report incidents and follow every fix." : "Pick up where your incidents left off."}
           </p>
 
-          <form onSubmit={submit} className="enter mt-7 grid" style={{ animationDelay: "180ms" }}>
+          <form ref={form} onSubmit={submit} className="enter mt-7 grid" style={{ animationDelay: "260ms" }}>
             <div className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${registering ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`} inert={!registering}>
               <div className="overflow-hidden">
                 <label className="grid gap-1 pb-3 text-[13px] text-fg-2">
@@ -85,13 +113,42 @@ export function Login() {
                 Work email
                 <input id="email" className="field text-fg" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" required />
               </label>
-              <label className="grid gap-1 text-[13px] text-fg-2">
-                Password
-                <input id="password" className="field text-fg" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={registering ? "new-password" : "current-password"} required />
-              </label>
+              <div className="grid gap-1 text-[13px] text-fg-2">
+                <label htmlFor="password">Password</label>
+                <div className="relative">
+                  <input
+                    id="password"
+                    className="field pr-14 text-fg"
+                    type={showPassword ? "text" : "password"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete={registering ? "new-password" : "current-password"}
+                    required
+                  />
+                  <button
+                    type="button"
+                    aria-pressed={showPassword}
+                    aria-controls="password"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-1 right-1 rounded-md px-2 text-xs text-fg-3 hover:bg-raise hover:text-fg"
+                  >
+                    {showPassword ? "Hide" : "Show"}
+                  </button>
+                </div>
+              </div>
               {error && <p role="alert" className="story-rise text-[13px] text-red">{error}</p>}
-              <button className="btn btn-go btn-sheen mt-1" disabled={busy}>
-                {registering ? "Create account" : "Sign in"}
+              <button className="btn btn-go btn-sheen mt-1 flex items-center justify-center gap-2 py-2.5" disabled={busy}>
+                {busy ? (
+                  <>
+                    <span className="spinner" aria-hidden="true" />
+                    {registering ? "Creating account" : "Signing in"}
+                  </>
+                ) : (
+                  <>
+                    {registering ? "Create account" : "Sign in"}
+                    <span className="btn-arrow" aria-hidden="true">→</span>
+                  </>
+                )}
               </button>
             </div>
           </form>
@@ -102,13 +159,22 @@ export function Login() {
               setError("");
             }}
             className="enter mt-3 text-[13px] text-fg-2 underline underline-offset-2 hover:text-fg"
-            style={{ animationDelay: "240ms" }}
+            style={{ animationDelay: "320ms" }}
           >
             {registering ? "Already have an account? Sign in" : "New here? Create an account"}
           </button>
 
+          <ul className="enter mt-9 flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-fg-3" style={{ animationDelay: "400ms" }}>
+            {["Live SLA clocks", "Automatic assignment", "Full audit trail"].map((feature) => (
+              <li key={feature} className="flex items-center gap-1.5">
+                <span className="size-1 rounded-full bg-accent" aria-hidden="true" />
+                {feature}
+              </li>
+            ))}
+          </ul>
+
           {usingMock && (
-            <div className="enter mt-8 border-t border-line pt-4" style={{ animationDelay: "300ms" }}>
+            <div className="enter mt-6 border-t border-line pt-4" style={{ animationDelay: "460ms" }}>
               <p className="label">Mock data: open a console</p>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {DEMO_ACCOUNTS.map((account) => (

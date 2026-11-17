@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { NotificationBell } from "./NotificationBell";
 
@@ -23,9 +23,12 @@ function Account() {
 
 /** Technician and admin: a persistent sidebar for tools used all day. */
 export function SideLayout({ nav }: { nav: NavItem[] }) {
+  // Keyed by section (/admin/users), so moving between sections fades in but picking
+  // another incident inside the queue doesn't replay the whole page.
+  const section = useLocation().pathname.split("/").slice(0, 3).join("/");
   return (
     <div className="grid min-h-dvh grid-cols-[minmax(0,1fr)] items-start gap-2.5 p-2.5 lg:grid-cols-[196px_minmax(0,1fr)]">
-      <nav className="card flex flex-wrap items-center gap-x-4 gap-y-2 px-2.5 py-2 lg:sticky lg:top-2.5 lg:flex-col lg:items-stretch lg:gap-[18px] lg:py-3.5">
+      <nav className="card relative z-20 flex flex-wrap items-center gap-x-4 gap-y-2 px-2.5 py-2 lg:sticky lg:top-2.5 lg:flex-col lg:items-stretch lg:gap-[18px] lg:py-3.5">
         <div className="flex items-center justify-between gap-2.5 px-1.5 font-semibold tracking-tight">
           <span>I-ITSM</span>
           <NotificationBell />
@@ -37,7 +40,7 @@ export function SideLayout({ nav }: { nav: NavItem[] }) {
               to={item.to}
               end={item.end}
               className={({ isActive }) =>
-                `rounded-[9px] px-2.5 py-[7px] font-medium ${isActive ? "bg-paper text-on-paper" : "text-fg-2 hover:bg-raise hover:text-fg"}`
+                `rounded-[9px] px-2.5 py-[7px] font-medium transition-colors duration-150 ${isActive ? "bg-paper text-on-paper" : "text-fg-2 hover:bg-raise hover:text-fg"}`
               }
             >
               {item.label}
@@ -48,7 +51,7 @@ export function SideLayout({ nav }: { nav: NavItem[] }) {
           <Account />
         </div>
       </nav>
-      <div className="min-w-0">
+      <div key={section} className="page-in min-w-0">
         <Outlet />
       </div>
     </div>
@@ -57,9 +60,10 @@ export function SideLayout({ nav }: { nav: NavItem[] }) {
 
 /** Employee: an occasional visitor gets a simple top bar and roomy content. */
 export function TopLayout({ nav }: { nav: NavItem[] }) {
+  const { pathname } = useLocation();
   return (
     <div className="mx-auto min-h-dvh max-w-[960px] px-4 py-5 sm:px-6">
-      <header className="mb-8 flex flex-wrap items-center gap-x-6 gap-y-3">
+      <header className="relative z-20 mb-8 flex flex-wrap items-center gap-x-6 gap-y-3">
         <div className="flex items-center gap-2.5 font-semibold tracking-tight">
           <span>I-ITSM</span>
           <NotificationBell />
@@ -70,7 +74,7 @@ export function TopLayout({ nav }: { nav: NavItem[] }) {
               key={item.to}
               to={item.to}
               end={item.end}
-              className={({ isActive }) => `font-medium ${isActive ? "text-lime" : "text-fg-2 hover:text-fg"}`}
+              className={({ isActive }) => `font-medium transition-colors duration-150 ${isActive ? "text-accent" : "text-fg-2 hover:text-fg"}`}
             >
               {item.label}
             </NavLink>
@@ -80,7 +84,9 @@ export function TopLayout({ nav }: { nav: NavItem[] }) {
           <Account />
         </div>
       </header>
-      <Outlet />
+      <div key={pathname} className="page-in">
+        <Outlet />
+      </div>
     </div>
   );
 }

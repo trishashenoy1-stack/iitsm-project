@@ -43,8 +43,8 @@ function Choice({ name, legend, options, value, onChange }: {
         {options.map((option) => (
           <label
             key={option.value}
-            className={`cursor-pointer rounded-[10px] border px-3.5 py-3 text-[13px] has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-lime ${
-              value === option.value ? "border-lime text-fg" : "border-line text-fg-2 hover:border-fg-3"
+            className={`cursor-pointer rounded-[10px] border px-3.5 py-3 text-[13px] has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-accent ${
+              value === option.value ? "border-accent text-fg" : "border-line text-fg-2 hover:border-fg-3"
             }`}
           >
             <input type="radio" className="sr-only" name={name} checked={value === option.value} onChange={() => onChange(option.value)} />

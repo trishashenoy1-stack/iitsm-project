@@ -56,7 +56,7 @@ export function SlaTile({ incident }: { incident: Incident }) {
         </p>
       </div>
       <div className="h-[3px] flex-[1_1_100%] overflow-hidden rounded-sm bg-white/15">
-        <span className="block h-full bg-fg" style={{ width: `${progress}%` }} />
+        <span className="bar-fill block h-full bg-fg" style={{ width: `${progress}%` }} />
       </div>
     </section>
   );

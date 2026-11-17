@@ -225,8 +225,8 @@ export function IncidentStory() {
             const current = stage === index;
             return (
               <g key={STAGES[index].label} transform={`translate(${node.x} ${node.y})`}>
-                {current && <circle r="13" className="story-ping stroke-lime" strokeWidth="1.5" />}
-                <circle r="6" className={`story-node ${current ? "fill-lime" : reached ? "fill-fg" : "fill-raise"}`} />
+                {current && <circle r="13" className="story-ping stroke-accent" strokeWidth="1.5" />}
+                <circle r="6" className={`story-node ${current ? "fill-accent" : reached ? "fill-fg" : "fill-raise"}`} />
                 <text y={node.y < 50 ? -18 : 28} textAnchor="middle" className={`story-node text-[12px] ${current ? "fill-fg font-medium" : reached ? "fill-fg-2" : "fill-fg-3"}`}>
                   {STAGES[index].label}
                 </text>
