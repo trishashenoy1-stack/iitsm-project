@@ -3,6 +3,7 @@ import { useState } from "react";
 import { api } from "../../api/client";
 import type { Incident, IncidentAction } from "../../api/types";
 import { Lifecycle } from "../../components/IncidentBits";
+import { Skeleton } from "../../components/Skeleton";
 import { SlaTile } from "../../components/SlaTile";
 import { useToast } from "../../components/Toast";
 import { LEVEL_LABEL, time, titleCase } from "../../lib/format";
@@ -53,7 +54,7 @@ export function IncidentPanel({ id }: { id: string }) {
     onError: (e) => setError(e.message),
   });
 
-  if (isPending) return <p className="p-4 text-fg-2">Loading incident</p>;
+  if (isPending) return <Skeleton label="Loading incident" />;
   if (loadError) return <p role="alert" className="p-4 text-red">{loadError.message}</p>;
 
   const modes: Mode[] = incident.status === "IN_PROGRESS" ? ["note", "ask", "resolve"] : ["note"];
@@ -93,7 +94,7 @@ export function IncidentPanel({ id }: { id: string }) {
   }
 
   return (
-    <main className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2.5">
+    <main className="stagger grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2.5">
       <SlaTile incident={incident} />
       <Lifecycle status={incident.status} />
 

@@ -1,20 +1,23 @@
 @import "tailwindcss";
 
-/* Lime only ever means "selected" or "main action". SLA states use amber and red. */
+/* Blue only ever means "selected" or "main action". Red is the SLA: a dim red glow when the
+   deadline is close, bright red once it is missed. Amber marks a technician at full capacity. */
 @theme {
-  --color-bg: #0b0c0a;
-  --color-panel: #141612;
-  --color-raise: #1d2019;
-  --color-line: #2c3027;
-  --color-fg: #f3f5ed;
-  --color-fg-2: #bcc1b1;
-  --color-fg-3: #989e8e;
-  --color-lime: #c9f25c;
-  --color-on-lime: #141a05;
-  --color-paper: #f6f7f1;
-  --color-on-paper: #11130e;
+  --color-bg: #080b12;
+  --color-panel: #0f1420;
+  --color-raise: #171d2c;
+  --color-line: #232c40;
+  --color-fg: #eef2fa;
+  --color-fg-2: #b4bccd;
+  --color-fg-3: #8a94a8;
+  --color-accent: #6aa8ff;
+  --color-accent-hover: #8bbcff;
+  --color-on-accent: #06162e;
+  --color-paper: #f2f5fb;
+  --color-on-paper: #0d1220;
   --color-amber: #f4b545;
   --color-red: #ff7a6b;
+  --color-red-soft: #e89a90;
   --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Geist Mono", ui-monospace, Menlo, monospace;
 }
@@ -22,7 +25,7 @@
 @property --glow {
   syntax: "<color>";
   inherits: true;
-  initial-value: #3b4034;
+  initial-value: #2b3550;
 }
 
 @layer base {
@@ -37,8 +40,15 @@
   button {
     cursor: pointer;
   }
+  ::selection {
+    background: rgb(106 168 255 / 0.32);
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line) transparent;
+  }
   :focus-visible {
-    outline: 2px solid var(--color-lime);
+    outline: 2px solid var(--color-accent);
     outline-offset: 2px;
   }
 }
@@ -58,6 +68,10 @@
     border-radius: 9px;
     font-weight: 500;
     border: 1px solid var(--color-line);
+    transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+  }
+  .btn:active:not(:disabled) {
+    transform: scale(0.975);
   }
   .btn:hover {
     border-color: var(--color-fg-3);
@@ -67,13 +81,13 @@
     opacity: 0.7;
   }
   .btn-go {
-    background: var(--color-lime);
-    border-color: var(--color-lime);
-    color: var(--color-on-lime);
+    background: var(--color-accent);
+    border-color: var(--color-accent);
+    color: var(--color-on-accent);
   }
   .btn-go:hover {
-    background: #d6f87c;
-    border-color: #d6f87c;
+    background: var(--color-accent-hover);
+    border-color: var(--color-accent-hover);
   }
   .field {
     width: 100%;
@@ -86,21 +100,21 @@
     color: var(--color-fg-3);
   }
   .sla-tile {
-    --glow: #3b4034;
+    --glow: #2b3550;
     transition: --glow 0.7s ease;
     background:
       radial-gradient(115% 190% at 92% 8%, var(--glow) 0%, transparent 68%),
       var(--color-panel);
   }
   .sla-tile[data-state="warning"] {
-    --glow: #7d520d;
+    --glow: #6b2320;
   }
   .sla-tile[data-state="breached"] {
-    --glow: #ab2a20;
+    --glow: #c22a1e;
   }
   .sla-tile[data-state="paused"],
   .sla-tile[data-state="done"] {
-    --glow: #272b22;
+    --glow: #1c2233;
   }
 }
 
@@ -121,12 +135,12 @@
   .story-aurora-a {
     top: -30%;
     right: -18%;
-    background: radial-gradient(closest-side, rgb(125 82 13 / 0.42), transparent);
+    background: radial-gradient(closest-side, rgb(42 86 168 / 0.4), transparent);
   }
   .story-aurora-b {
     bottom: -38%;
     left: -16%;
-    background: radial-gradient(closest-side, rgb(201 242 92 / 0.09), transparent);
+    background: radial-gradient(closest-side, rgb(106 168 255 / 0.12), transparent);
     animation-duration: 21s;
     animation-direction: alternate-reverse;
   }
@@ -152,7 +166,7 @@
     background: var(--color-line);
   }
   .story-edge[data-state="warning"] {
-    --edge: var(--color-amber);
+    --edge: var(--color-red);
   }
   .story-edge::before {
     content: "";
@@ -167,13 +181,13 @@
     opacity: 0;
   }
   .story-edge[data-state="ok"] .story-tile {
-    --glow: #3b4034;
+    --glow: #2b3550;
   }
   .story-edge[data-state="warning"] .story-tile {
-    --glow: #8a5a0e;
+    --glow: #7a2622;
   }
   .story-edge[data-state="done"] .story-tile {
-    --glow: #272b22;
+    --glow: #1c2233;
   }
   .story-clock {
     font-size: clamp(54px, 6.2vw, 84px);
@@ -219,9 +233,178 @@
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
   }
   .field:focus {
-    border-color: var(--color-lime);
-    box-shadow: 0 0 0 3px rgb(201 242 92 / 0.14);
+    border-color: var(--color-accent);
+    box-shadow: 0 0 0 3px rgb(106 168 255 / 0.18);
     outline: none;
+  }
+}
+
+/* App-wide motion. Short, and only opacity and transform, so it stays crisp on video. */
+@layer components {
+  .page-in {
+    animation: page-in 0.35s ease-out both;
+  }
+  .stagger > * {
+    animation: enter 0.4s ease-out both;
+  }
+  .stagger > :nth-child(2) { animation-delay: 40ms; }
+  .stagger > :nth-child(3) { animation-delay: 80ms; }
+  .stagger > :nth-child(4) { animation-delay: 120ms; }
+  .stagger > :nth-child(5) { animation-delay: 160ms; }
+  .stagger > :nth-child(6) { animation-delay: 200ms; }
+  .stagger > :nth-child(7) { animation-delay: 240ms; }
+  .stagger > :nth-child(n + 8) { animation-delay: 280ms; }
+  .lift {
+    transition: background-color 0.15s ease, transform 0.15s ease;
+  }
+  .lift:hover {
+    transform: translateY(-1px);
+  }
+  .pop {
+    animation: pop 0.35s cubic-bezier(0.2, 1.5, 0.4, 1) both;
+  }
+  .menu-in {
+    transform-origin: top left;
+    animation: menu-in 0.16s ease-out both;
+  }
+  .toast-in {
+    animation: toast-in 0.3s cubic-bezier(0.2, 1.2, 0.4, 1) both;
+  }
+  .skeleton {
+    border-radius: 8px;
+    background: linear-gradient(100deg, var(--color-panel) 30%, var(--color-raise) 50%, var(--color-panel) 70%);
+    background-size: 220% 100%;
+    animation: shimmer 1.3s linear infinite;
+  }
+  .spinner {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    animation: story-spin 0.7s linear infinite;
+  }
+  .bar-fill {
+    transition: width 0.9s linear;
+  }
+
+  /* Login, form side */
+  .login-pane {
+    --mx: 30%;
+    --my: 40%;
+    position: relative;
+    isolation: isolate;
+  }
+  .login-pane::before,
+  .login-pane::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+  }
+  /* A dot grid that fades out toward the edges. */
+  .login-pane::before {
+    background-image: radial-gradient(rgb(138 148 168 / 0.22) 1px, transparent 1px);
+    background-size: 22px 22px;
+    mask-image: radial-gradient(75% 60% at 40% 45%, #000 0%, transparent 100%);
+  }
+  /* A soft light that follows the pointer. */
+  .login-pane::after {
+    background: radial-gradient(340px circle at var(--mx) var(--my), rgb(106 168 255 / 0.1), transparent 70%);
+  }
+  .logo-mark {
+    position: relative;
+    display: inline-grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 7px;
+    background: var(--color-accent);
+  }
+  .logo-mark::before {
+    content: "";
+    width: 2px;
+    height: 8px;
+    border-radius: 1px;
+    background: var(--color-on-accent);
+    transform-origin: 50% 100%;
+    translate: 0 -4px;
+    animation: story-spin 6s linear infinite;
+  }
+  .logo-mark::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    border: 1.5px solid var(--color-accent);
+    animation: logo-ring 2.6s ease-out infinite;
+  }
+  .word {
+    display: inline-block;
+    animation: word-in 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  .btn-arrow {
+    display: inline-block;
+    transition: transform 0.2s ease;
+  }
+  .btn:hover .btn-arrow {
+    transform: translateX(3px);
+  }
+}
+
+@keyframes page-in {
+  from {
+    transform: translateY(6px);
+    opacity: 0;
+  }
+}
+
+@keyframes pop {
+  from {
+    transform: scale(0.4);
+  }
+}
+
+@keyframes menu-in {
+  from {
+    transform: translateY(-4px) scale(0.97);
+    opacity: 0;
+  }
+}
+
+@keyframes toast-in {
+  from {
+    transform: translateY(14px) scale(0.96);
+    opacity: 0;
+  }
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -120% 0;
+  }
+}
+
+@keyframes logo-ring {
+  from {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  to {
+    transform: scale(1.7);
+    opacity: 0;
+  }
+}
+
+@keyframes word-in {
+  from {
+    transform: translateY(0.45em);
+    opacity: 0;
+    filter: blur(6px);
   }
 }
 
@@ -289,7 +472,22 @@
   .story-ping,
   .story-rise,
   .story-pop,
-  .enter {
+  .enter,
+  .page-in,
+  .stagger > *,
+  .pop,
+  .menu-in,
+  .toast-in,
+  .skeleton,
+  .word,
+  .logo-mark::before,
+  .logo-mark::after {
     animation: none;
+  }
+  .lift,
+  .btn,
+  .bar-fill,
+  .btn-arrow {
+    transition: none;
   }
 }

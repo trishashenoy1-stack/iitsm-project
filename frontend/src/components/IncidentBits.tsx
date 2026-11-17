@@ -19,7 +19,7 @@ const TIME_COLOR: Record<SlaState, string> = {
   ok: "text-fg-2",
   paused: "text-fg-2",
   done: "text-fg-2",
-  warning: "text-amber",
+  warning: "text-red-soft",
   breached: "text-red",
 };
 

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../../api/client";
 import type { Incident, Status } from "../../api/types";
+import { Skeleton } from "../../components/Skeleton";
 import { useToast } from "../../components/Toast";
 import { headline, time } from "../../lib/format";
 import { slaState, useNow } from "../../lib/sla";
@@ -34,7 +35,7 @@ function Expected({ incident }: { incident: Incident }) {
   const state = slaState(incident.sla, now);
   if (state === "done") return null;
   if (state === "paused") return <p className="mt-1 text-[13px] text-fg-2">The timer is paused until you reply.</p>;
-  if (state === "breached") return <p className="mt-1 text-[13px] text-amber">This is taking longer than expected.</p>;
+  if (state === "breached") return <p className="mt-1 text-[13px] text-red-soft">This is taking longer than expected.</p>;
   const due = new Date(incident.sla.resolutionDeadline);
   const today = due.toDateString() === new Date(now).toDateString();
   return (
@@ -72,7 +73,7 @@ export function EmployeeIncident() {
     onError: (e, { area }) => setError({ area, message: e.message }),
   });
 
-  if (isPending) return <p className="text-fg-2">Loading incident</p>;
+  if (isPending) return <Skeleton label="Loading incident" />;
   if (loadError) return <p role="alert" className="text-red">{loadError.message}</p>;
 
   const areaError = (area: string) =>
@@ -159,7 +160,7 @@ export function EmployeeIncident() {
                 aria-checked={rating === n}
                 aria-label={`${n} out of 5`}
                 onClick={() => setRating(n)}
-                className={`size-10 rounded-[10px] border font-mono ${rating === n ? "border-lime text-fg" : "border-line text-fg-2 hover:border-fg-3"}`}
+                className={`size-10 rounded-[10px] border font-mono ${rating === n ? "border-accent text-fg" : "border-line text-fg-2 hover:border-fg-3"}`}
               >
                 {n}
               </button>

@@ -4,6 +4,8 @@ import { Bar, BarChart, CartesianGrid, Cell, LabelList, ResponsiveContainer, Too
 import { Link } from "react-router-dom";
 import { api } from "../../api/client";
 import { PriorityTag } from "../../components/IncidentBits";
+import { Skeleton } from "../../components/Skeleton";
+import { useCountUp } from "../../lib/useCountUp";
 import { STATUS_LABEL } from "../../lib/format";
 
 const TICK = { fill: "var(--color-fg-2)", fontSize: 12 };
@@ -49,11 +51,15 @@ function Panel({ title, finding, table, children, className = "" }: { title: str
   );
 }
 
+function CountUp({ value }: { value: number }) {
+  return <>{useCountUp(value)}</>;
+}
+
 function Metric({ label, value, tone, to }: { label: string; value: number; tone?: string; to?: string }) {
   const body = (
     <>
       <span className="block text-xs text-fg-3">{label}</span>
-      <span className={`mt-0.5 block font-mono text-[28px] leading-tight font-medium tracking-tight tabular-nums ${tone ?? ""}`}>{value}</span>
+      <span className={`mt-0.5 block font-mono text-[28px] leading-tight font-medium tracking-tight tabular-nums ${tone ?? ""}`}><CountUp value={value} /></span>
     </>
   );
   return to ? <Link to={to} className="rounded-lg hover:opacity-80">{body}</Link> : <div>{body}</div>;
@@ -106,7 +112,7 @@ function Clusters() {
 
 export function Overview() {
   const { data, isPending, error } = useQuery({ queryKey: ["admin", "overview"], queryFn: api.admin.overview, refetchInterval: 15000 });
-  if (isPending) return <p className="p-4 text-fg-2">Loading overview</p>;
+  if (isPending) return <Skeleton label="Loading overview" rows={4} />;
   if (error) return <p role="alert" className="p-4 text-red">{error.message}</p>;
 
   const workload = data.technicianWorkload.map((t) => {
@@ -121,11 +127,11 @@ export function Overview() {
   const maxWorkload = Math.max(...workload.map((t) => Math.max(t.max, t.active)));
 
   return (
-    <main className="grid grid-cols-[minmax(0,1fr)] gap-2.5 xl:grid-cols-5">
+    <main className="stagger grid grid-cols-[minmax(0,1fr)] gap-2.5 xl:grid-cols-5">
       <section aria-label="Incident overview" className="card flex flex-wrap items-center gap-x-10 gap-y-3 px-6 py-5 xl:col-span-5">
         <div className="mr-4">
           <span className="block text-[13px] text-fg-2">Open incidents</span>
-          <span className="block font-mono text-[56px] leading-none font-medium tracking-[-0.04em] tabular-nums">{data.open}</span>
+          <span className="block font-mono text-[56px] leading-none font-medium tracking-[-0.04em] tabular-nums"><CountUp value={data.open} /></span>
         </div>
         <Metric label="Critical open" value={data.critical} />
         <Metric label="SLA violations" value={data.slaViolations} tone={data.slaViolations > 0 ? "text-red" : ""} to="/admin/sla-violations" />

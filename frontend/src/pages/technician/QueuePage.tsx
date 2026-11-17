@@ -3,6 +3,7 @@ import { Navigate, NavLink, useParams } from "react-router-dom";
 import { api } from "../../api/client";
 import type { Incident } from "../../api/types";
 import { PriorityTag, SlaBrief } from "../../components/IncidentBits";
+import { Skeleton } from "../../components/Skeleton";
 import { headline } from "../../lib/format";
 import { remainingSeconds } from "../../lib/sla";
 import { IncidentPanel } from "./IncidentPanel";
@@ -21,7 +22,7 @@ export function QueuePage() {
     refetchInterval: 15000,
   });
 
-  if (isPending) return <p className="p-4 text-fg-2">Loading your queue</p>;
+  if (isPending) return <Skeleton label="Loading your queue" rows={4} />;
   if (error) return <p role="alert" className="p-4 text-red">{error.message}</p>;
 
   const queue = urgencyOrder(data.filter((i) => i.status !== "CLOSED"));
@@ -40,11 +41,11 @@ export function QueuePage() {
             key={incident.id}
             to={`/technician/queue/${incident.id}`}
             className={({ isActive }) =>
-              `group grid grid-cols-[minmax(0,1fr)_auto] gap-x-2.5 gap-y-0.5 rounded-[9px] px-2 py-[9px] hover:bg-raise ${isActive ? "active bg-raise" : ""}`
+              `group grid grid-cols-[minmax(0,1fr)_auto] gap-x-2.5 gap-y-0.5 rounded-[9px] px-2 py-[9px] transition-colors duration-150 hover:bg-raise ${isActive ? "active bg-raise" : ""}`
             }
           >
             <span className="flex items-center gap-1.5">
-              <span className="font-mono text-xs text-fg-2 group-[.active]:text-lime">{incident.id}</span>
+              <span className="font-mono text-xs text-fg-2 group-[.active]:text-accent">{incident.id}</span>
               <PriorityTag priority={incident.priority} />
             </span>
             <SlaBrief incident={incident} />

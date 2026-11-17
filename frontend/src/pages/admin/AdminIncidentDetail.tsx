@@ -4,6 +4,7 @@ import { Link, useParams } from "react-router-dom";
 import { api } from "../../api/client";
 import type { Incident } from "../../api/types";
 import { Lifecycle } from "../../components/IncidentBits";
+import { Skeleton } from "../../components/Skeleton";
 import { SlaTile } from "../../components/SlaTile";
 import { useToast } from "../../components/Toast";
 import { LEVEL_LABEL, time, titleCase } from "../../lib/format";
@@ -33,7 +34,7 @@ export function AdminIncidentDetail() {
     onError: (e) => setError(e.message),
   });
 
-  if (isPending) return <p className="p-4 text-fg-2">Loading incident</p>;
+  if (isPending) return <Skeleton label="Loading incident" />;
   if (loadError) return <p role="alert" className="p-4 text-red">{loadError.message}</p>;
 
   const canAssign = incident.status === "NEW" || incident.status === "CLASSIFIED";

@@ -34,8 +34,8 @@ export function AssignmentPage() {
         {data.options.map((option) => (
           <label
             key={option.id}
-            className={`cursor-pointer rounded-[10px] border px-4 py-3 has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-lime ${
-              selected === option.id ? "border-lime" : "border-line hover:border-fg-3"
+            className={`cursor-pointer rounded-[10px] border px-4 py-3 has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-accent ${
+              selected === option.id ? "border-accent" : "border-line hover:border-fg-3"
             }`}
           >
             <input type="radio" name="strategy" className="sr-only" checked={selected === option.id} onChange={() => setChoice(option.id)} />
