@@ -28,7 +28,7 @@ export function SideLayout({ nav }: { nav: NavItem[] }) {
   const section = useLocation().pathname.split("/").slice(0, 3).join("/");
   return (
     <div className="grid min-h-dvh grid-cols-[minmax(0,1fr)] items-start gap-2.5 p-2.5 lg:grid-cols-[196px_minmax(0,1fr)]">
-      <nav className="card flex flex-wrap items-center gap-x-4 gap-y-2 px-2.5 py-2 lg:sticky lg:top-2.5 lg:flex-col lg:items-stretch lg:gap-[18px] lg:py-3.5">
+      <nav className="card relative z-20 flex flex-wrap items-center gap-x-4 gap-y-2 px-2.5 py-2 lg:sticky lg:top-2.5 lg:flex-col lg:items-stretch lg:gap-[18px] lg:py-3.5">
         <div className="flex items-center justify-between gap-2.5 px-1.5 font-semibold tracking-tight">
           <span>I-ITSM</span>
           <NotificationBell />
@@ -63,7 +63,7 @@ export function TopLayout({ nav }: { nav: NavItem[] }) {
   const { pathname } = useLocation();
   return (
     <div className="mx-auto min-h-dvh max-w-[960px] px-4 py-5 sm:px-6">
-      <header className="mb-8 flex flex-wrap items-center gap-x-6 gap-y-3">
+      <header className="relative z-20 mb-8 flex flex-wrap items-center gap-x-6 gap-y-3">
         <div className="flex items-center gap-2.5 font-semibold tracking-tight">
           <span>I-ITSM</span>
           <NotificationBell />

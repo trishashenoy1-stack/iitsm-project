@@ -64,7 +64,7 @@ export function NotificationBell() {
         )}
       </button>
       {open && (
-        <div className="menu-in absolute -left-16 top-9 z-10 w-[min(310px,calc(100vw-40px))] lg:left-0 rounded-xl border border-line bg-raise p-1.5">
+        <div className="menu-in absolute -left-16 top-9 z-10 max-h-[70vh] w-[min(310px,calc(100vw-40px))] overflow-y-auto rounded-xl border border-line bg-raise p-1.5 font-normal tracking-normal lg:left-0">
           {data.length === 0 && <p className="px-2.5 py-2 text-[13px] text-fg-2">You're all caught up.</p>}
           <ul>
             {data.map((n) => (
