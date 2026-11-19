@@ -40,6 +40,11 @@ class EscalationJob(BatchJob[Any]):
             return  # acknowledged (or escalated) since select()
 
         target = self._directory.next_in_chain(fresh.PENDING_G15_escalation_level)
+        # Never escalate to the technician who already holds it (a team lead can also
+        # take ordinary assignments): skip to the next level up.
+        assignee = getattr(getattr(fresh, "technician", None), "user_id", None)
+        while target is not None and target.user_id == assignee:
+            target = self._directory.next_in_chain(target.level)
         if target is None:
             if fresh.PENDING_G4_mark_escalation_exhausted():
                 yield "chain_exhausted"

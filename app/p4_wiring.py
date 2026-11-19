@@ -80,6 +80,19 @@ class P4Runtime:
         finally:
             uow.close()
 
+    def predict_category(self, description: str) -> tuple[str, float] | None:
+        """Synchronous categorizer call for a report with no category (None if unsure)."""
+        if not self.categorizer.enabled:
+            return None
+        text = incident_text("", description)
+        if not text:
+            return None
+        suggestion = self.categorizer.predict(self.embedder.encode_one(text))
+        if suggestion is None:
+            return None
+        self.features.record_ok(FeatureRegistry.CATEGORIZER, "auto_classified")
+        return suggestion.category.upper(), suggestion.confidence
+
     def clusters(self) -> dict[str, list[frozenset[str]]]:
         uow = self.uow_factory()
         try:

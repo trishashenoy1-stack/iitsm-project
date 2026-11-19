@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../../api/client";
-import type { Incident } from "../../api/types";
+import type { Incident, Priority } from "../../api/types";
 import { Lifecycle } from "../../components/IncidentBits";
 import { Skeleton } from "../../components/Skeleton";
 import { SlaTile } from "../../components/SlaTile";
@@ -15,6 +15,8 @@ export function AdminIncidentDetail() {
   const toast = useToast();
   const [technicianId, setTechnicianId] = useState("");
   const [error, setError] = useState("");
+  const [priority, setPriority] = useState<Priority | "">("");
+  const [reason, setReason] = useState("");
 
   const { data: incident, isPending, error: loadError } = useQuery({
     queryKey: ["incident", id],
@@ -47,6 +49,22 @@ export function AdminIncidentDetail() {
     mutation.mutate(() => api.assignIncident(id, technicianId), { onSuccess: () => toast(`Assigned to ${technicianId}`) });
   }
 
+  const isOpen = !["RESOLVED", "VERIFIED", "CLOSED"].includes(incident.status);
+
+  function changePriority() {
+    if (!priority || priority === incident!.priority) {
+      setError("Choose a different priority first.");
+      return;
+    }
+    mutation.mutate(() => api.setPriority(id, priority, reason.trim()), {
+      onSuccess: () => {
+        toast(`Priority changed to ${priority}`);
+        setPriority("");
+        setReason("");
+      },
+    });
+  }
+
   return (
     <main className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2.5">
       <Link to="/admin/incidents" className="px-1 text-[13px] text-fg-2 hover:text-fg">Back to incidents</Link>
@@ -77,6 +95,28 @@ export function AdminIncidentDetail() {
         </section>
       )}
 
+      {isOpen && (
+        <section className="card px-4 py-3.5">
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="grid gap-1 text-[13px] text-fg-2">
+              Override priority (now {incident.priority})
+              <select id="override-priority" className="field min-w-[120px] text-fg" value={priority} onChange={(e) => setPriority(e.target.value as Priority | "")}>
+                <option value="">Choose</option>
+                {(["P1", "P2", "P3", "P4"] as const).map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+            </label>
+            <label className="grid min-w-[220px] flex-1 gap-1 text-[13px] text-fg-2">
+              Reason
+              <input className="field text-fg" value={reason} maxLength={500} placeholder="Why the calculated priority is wrong" onChange={(e) => setReason(e.target.value)} />
+            </label>
+            <button className="btn" disabled={mutation.isPending} onClick={changePriority}>Change priority</button>
+          </div>
+          {!(canAssign || incident.status === "VERIFIED") && error && <p role="alert" className="mt-1.5 text-[13px] text-red">{error}</p>}
+        </section>
+      )}
+
       <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-2.5 lg:grid-cols-[minmax(0,1fr)_minmax(190px,260px)]">
         <section className="card px-4 py-3.5">
           <h2 className="label">History</h2>
@@ -96,6 +136,9 @@ export function AdminIncidentDetail() {
               ["Technician", incident.technician?.name ?? "Unassigned"],
               ["Reporter", incident.reporter.name],
               ["Category", titleCase(incident.category)],
+              ...(incident.suggestedCategory
+                ? [["AI-suggested category", titleCase(incident.suggestedCategory)]]
+                : []),
               ["Impact", LEVEL_LABEL[incident.impact]],
               ["Urgency", LEVEL_LABEL[incident.urgency]],
               ["Affected users", String(incident.affectedUsers)],

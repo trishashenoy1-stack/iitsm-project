@@ -204,6 +204,19 @@ export function IncidentPanel({ id }: { id: string }) {
               </ul>
             </section>
           )}
+          {incident.suggestedCategory && (
+            <section className="card px-4 py-3.5">
+              <h2 className="label">Suggested category</h2>
+              <p className="mt-2 text-[13px]">
+                {titleCase(incident.suggestedCategory)}
+                <small className="block text-xs text-fg-3">
+                  {incident.suggestedCategory === incident.category
+                    ? "Matches the current category."
+                    : "Predicted from the description by the categorizer."}
+                </small>
+              </p>
+            </section>
+          )}
           {incident.possibleDuplicates.length > 0 && (
             <section className="card px-4 py-3.5">
               <h2 className="label">Possible duplicates</h2>
