@@ -28,7 +28,7 @@ class SimulatedEmailGateway(EmailGateway):
 
     def send(self, to, subject, body):
         self.sent.append((to, subject, body))
-        log.info("Simulated email: %s", subject)
+        log.info("Simulated email to %s: %s", to, subject)
 
 
 @dataclass(frozen=True)

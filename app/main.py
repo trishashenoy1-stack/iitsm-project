@@ -16,6 +16,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import InterfaceError, OperationalError, SQLAlchemyError
 
 from app.api import routes
 from app.api.deps import notification_user
@@ -29,6 +30,9 @@ log = logging.getLogger(__name__)
 
 def create_app(settings: Settings | None = None, backend: Backend | None = None) -> FastAPI:
     settings = settings or get_settings()
+    # Show the app's own INFO logs (simulated emails, job runs) next to uvicorn's.
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s:     %(name)s: %(message)s")
+    logging.getLogger("apscheduler").setLevel(logging.WARNING)  # one line per tick is noise
 
     # Built here, not in the lifespan, because the notification routes need the live
     # module. Building connects to nothing heavy; P4's models load in the lifespan.
@@ -56,6 +60,21 @@ def create_app(settings: Settings | None = None, backend: Backend | None = None)
         if status >= 500:
             log.error("unhandled domain error: %r", error)
         return JSONResponse({"code": code, "message": str(error)}, status_code=status)
+
+    @app.exception_handler(OperationalError)
+    @app.exception_handler(InterfaceError)
+    async def database_down(_request: Request, error: Exception) -> JSONResponse:
+        log.error("database unavailable: %r", error)
+        message = "The database isn't reachable right now. Try again shortly."
+        return JSONResponse({"code": "DATABASE_UNAVAILABLE", "message": message},
+                            status_code=503)
+
+    @app.exception_handler(SQLAlchemyError)
+    async def database_error(_request: Request, error: SQLAlchemyError) -> JSONResponse:
+        log.error("database error: %r", error)
+        return JSONResponse({"code": "DATABASE_ERROR",
+                             "message": "Something went wrong saving or loading data."},
+                            status_code=500)
 
     @app.exception_handler(PermissionError)
     async def append_only(_request: Request, error: PermissionError) -> JSONResponse:

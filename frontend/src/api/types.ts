@@ -123,6 +123,8 @@ export interface Incident {
   /** The API must leave out internal technician notes for employees. */
   history: HistoryEntry[];
   possibleDuplicates: PossibleDuplicate[];
+  /** The categorizer's pick from the description (staff only; null when unsure). */
+  suggestedCategory?: string | null;
 }
 
 export interface AppNotification {

@@ -59,6 +59,11 @@ class FeedbackBody(Body):
     comment: str = ""
 
 
+class PriorityBody(Body):
+    priority: str = Field(max_length=2)
+    reason: str = Field(default="", max_length=500)
+
+
 class AssignBody(Body):
     technicianId: str = Field(max_length=16)
 
@@ -211,6 +216,15 @@ def feedback(incident_id: str, body: FeedbackBody, user: UserRecord = Depends(cu
 def assign(incident_id: str, body: AssignBody, user: UserRecord = Depends(require_staff),
            app: Backend = Depends(backend)) -> dict[str, Any]:
     app.incidents.assign(user.id, incident_id, body.technicianId)
+    return app.incidents.get(user.id, incident_id)
+
+
+@api.post("/incidents/{incident_id}/priority", tags=["incidents"])
+def set_priority(incident_id: str, body: PriorityBody, user: UserRecord = Depends(require_staff),
+                 app: Backend = Depends(backend)) -> dict[str, Any]:
+    """Staff override of the calculated priority. Audited and notified; SLA deadlines move,
+    still counted from the original creation time."""
+    app.incidents.set_priority(user.id, incident_id, body.priority, body.reason)
     return app.incidents.get(user.id, incident_id)
 
 

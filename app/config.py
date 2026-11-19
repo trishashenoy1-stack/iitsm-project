@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     # Create tables on start when there is no Alembic run (local SQLite, tests).
     CREATE_TABLES_ON_START: bool = True
 
+    # The same reporter filing the same text for the same service within this many
+    # seconds is refused as a resubmission (409 DUPLICATE_INCIDENT). 0 turns it off.
+    DUPLICATE_RESUBMIT_SECONDS: int = 300
+
     # --- P4: background jobs ------------------------------------------------------
     SCHEDULER_ENABLED: bool = True
     SLA_MONITOR_INTERVAL_SECONDS: int = 30

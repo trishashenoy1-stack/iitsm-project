@@ -34,6 +34,9 @@ T0 = datetime(2026, 11, 14, 10, 0, tzinfo=UTC)
 
 
 def make_settings(url: str, **extra: Any) -> Settings:
+    # Most tests report the same text many times on purpose, so the resubmission check is
+    # off unless a test turns it on (see test_audit_fixes.py).
+    extra.setdefault("DUPLICATE_RESUBMIT_SECONDS", 0)
     return Settings(DATABASE_URL=url, JWT_SECRET="t" * 40, APP_ENV="test",
                     SCHEDULER_ENABLED=False, EMBEDDER_BACKEND="hashing",
                     INTELLIGENCE_ASYNC=False, **extra)
@@ -117,9 +120,10 @@ def db_url(tmp_path: Path) -> str:
 def world_factory(db_url: str) -> Iterator[Callable[..., World]]:
     built: list[Backend] = []
 
-    def build(with_p4: bool = False) -> World:
+    def build(with_p4: bool = False, **settings: Any) -> World:
         clock = FakeClock(T0)
-        backend = Backend.build(make_settings(db_url), clock=clock, with_p4=with_p4)
+        backend = Backend.build(make_settings(db_url, **settings), clock=clock,
+                                with_p4=with_p4)
         built.append(backend)
         add_people(backend)
         return World(backend, TestClient(create_app(backend.settings, backend=backend)),

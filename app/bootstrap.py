@@ -7,6 +7,7 @@ in-memory database and a FakeClock. Nothing else constructs services.
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass
 from typing import Any
 
@@ -25,7 +26,7 @@ from app.services.notification_rules import BACKEND_RULES
 from app.services.notification_store import SqlNotificationRepository, SqlRecipientDirectory
 from domain.clock import Clock, SystemClock
 from domain.events import EventBus
-from notifications.module import NotificationModule
+from notifications.module import NotificationModule, email_gateway_from_env
 
 log = logging.getLogger(__name__)
 
@@ -65,21 +66,32 @@ class Backend:
         notifications = NotificationModule(
             bus, SqlRecipientDirectory(session_factory),
             repository=SqlNotificationRepository(session_factory), rules=BACKEND_RULES,
+            email_gateway=email_gateway_from_env(_email_env(settings)),
         )
         backend = cls(
             settings=settings, engine=engine, session_factory=session_factory, bus=bus,
             clock=clock, uow_factory=uow_factory, passwords=passwords, tokens=tokens,
             accounts=AccountService(uow_factory, passwords, tokens),
-            incidents=IncidentService(uow_factory), admin=AdminService(uow_factory, passwords),
+            incidents=IncidentService(
+                uow_factory, resubmit_window_seconds=settings.DUPLICATE_RESUBMIT_SECONDS),
+            admin=AdminService(uow_factory, passwords),
             notifications=notifications,
         )
         if with_p4:
             backend.p4 = _wire_p4(settings, bus, uow_factory, clock)
+            backend._connect_p4()
         return backend
 
     def start_p4(self) -> None:
         if self.p4 is None:
             self.p4 = _wire_p4(self.settings, self.bus, self.uow_factory, self.clock)
+            self._connect_p4()
+
+    def _connect_p4(self) -> None:
+        """Hand P4's categorizer to the report use case, so "Not sure" reports are
+        classified before a technician is chosen."""
+        if self.p4 is not None:
+            self.incidents.set_category_predictor(self.p4.predict_category)
 
     def start(self) -> None:
         self.notifications.start()
@@ -89,6 +101,23 @@ class Backend:
         if self.p4 is not None:
             self.p4.shutdown()
         self.engine.dispose()
+
+
+def _email_env(settings: Settings) -> dict[str, str]:
+    """EMAIL_BACKEND and SMTP_* from the process environment, falling back to .env.
+
+    pydantic-settings reads .env for Settings only, so without this a local
+    `uvicorn app.main:app` silently ignored EMAIL_BACKEND=smtp in .env. Tests
+    (APP_ENV=test) never read .env, so they can't send real mail.
+    """
+    env: dict[str, str] = {}
+    if settings.APP_ENV != "test":
+        from dotenv import dotenv_values
+
+        env_file = settings.model_config.get("env_file") or ".env"
+        env = {k: v for k, v in dotenv_values(str(env_file)).items() if v is not None}
+    env.update(os.environ)
+    return env
 
 
 def _wire_p4(settings: Settings, bus: EventBus, uow_factory: UnitOfWorkFactory,

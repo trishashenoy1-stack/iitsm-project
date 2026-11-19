@@ -7,8 +7,10 @@ text, resolution text, the information request) and commits.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import Any
 
 from app.db.models import IncidentRecord, UserRecord
@@ -21,6 +23,7 @@ from app.services.assignment import AssignmentPolicy
 from domain.enums import Impact, Priority, Role, Status, Urgency
 from domain.events import SYSTEM
 from domain.exceptions import (
+    DuplicateIncidentError,
     InvalidStateTransitionError,
     NoEligibleTechnicianError,
     UnauthorizedActionError,
@@ -29,6 +32,8 @@ from domain.exceptions import (
 from domain.factory import IncidentFactory
 from domain.priority import MatrixPriorityStrategy
 from domain.users import Technician
+
+log = logging.getLogger(__name__)
 
 ACTIONS = ("acknowledge", "start_work", "request_info", "provide_info", "resolve",
            "verify", "reject_resolution", "close")
@@ -50,14 +55,29 @@ class NewIncident:
 
 
 def can_view(user: UserRecord, incident: IncidentRecord) -> bool:
-    """Ownership check on every incident read and write (the IDOR rule)."""
+    """Ownership check on every incident read and write (the IDOR rule).
+
+    People in the escalation chain (team lead, system admin, IT manager) can see every
+    incident, because an escalation can reach them for any incident.
+    """
     return (user.role == Role.ADMIN.value or incident.reporter_id == user.id
-            or incident.technician_id == user.id)
+            or incident.technician_id == user.id or user.escalation_level is not None)
+
+
+# Description -> (CATEGORY NAME, confidence), or None when unsure. P4's categorizer.
+CategoryPredictor = Callable[[str], "tuple[str, float] | None"]
 
 
 class IncidentService:
-    def __init__(self, uow_factory: Callable[[], UnitOfWork]) -> None:
+    def __init__(self, uow_factory: Callable[[], UnitOfWork],
+                 resubmit_window_seconds: int = 0) -> None:
         self._uow_factory = uow_factory
+        self._resubmit_window = timedelta(seconds=max(0, resubmit_window_seconds))
+        self._predict_category: CategoryPredictor | None = None
+
+    def set_category_predictor(self, predictor: CategoryPredictor | None) -> None:
+        """Wired at startup once P4's model is loaded (Backend.start_p4)."""
+        self._predict_category = predictor
 
     # ---- writes -----------------------------------------------------------------
     def report(self, actor_id: str, data: NewIncident, seed_key: str | None = None,
@@ -65,6 +85,7 @@ class IncidentService:
         with self._uow_factory() as uow:
             reporter = uow.users.domain(actor_id)
             service = uow.services.domain(data.service_id)
+            self._refuse_resubmission(uow, actor_id, data)
             impact, urgency = _level(Impact, data.impact), _level(Urgency, data.urgency)
             factory = IncidentFactory(
                 uow.clock, uow.bus, MatrixPriorityStrategy(), uow.sla.policy(),
@@ -72,19 +93,58 @@ class IncidentService:
                 category_registry=uow.categories.registry(),
             )
             created_at = uow.clock.now()
+            category = data.category or None
+            auto = None
+            if category is None:
+                auto = self._auto_category(data.description, uow.categories.registry())
+                category = auto[0] if auto else None
             domain = factory.create(reporter, service, data.description, impact, urgency,
                                     affected_users=data.affected_users,
-                                    category=data.category or None)
+                                    category=category)
             incident = PersistedIncident(domain, created_at, uow.clock, uow.bus)
             uow.incidents.add(incident, seed_key=seed_key)
             if domain.category is not None:
                 domain.classify(actor=SYSTEM)
-                uow.journal.annotate(domain.incident_id, "classify",
-                                     category=domain.category.name)
+                detail: dict[str, Any] = {"category": domain.category.name}
+                if auto:
+                    detail["auto_confidence"] = auto[1]
+                uow.journal.annotate(domain.incident_id, "classify", **detail)
             if auto_assign:
                 self._auto_assign(uow, incident)
             uow.commit()
             return str(domain.incident_id)
+
+    def _refuse_resubmission(self, uow: UnitOfWork, actor_id: str, data: NewIncident) -> None:
+        """Exact resubmission (double-click, impatient retry) is refused. Similar reports
+        from other people are linked as possible duplicates instead, never refused."""
+        if not self._resubmit_window:
+            return
+        since = uow.clock.now() - self._resubmit_window
+        existing = uow.incidents.open_resubmission_of(actor_id, data.service_id,
+                                                      data.description, since)
+        if existing is not None:
+            raise DuplicateIncidentError(
+                f"You already reported this as {existing}. Add details there instead.")
+
+    def _auto_category(self, description: str, registry: Any) -> tuple[str, float] | None:
+        """The categorizer's pick for a "Not sure" report, if confident and still active.
+
+        Runs before assignment so skill-based assignment gets a skill. Any failure just
+        leaves the incident unclassified: reporting must never fail because of the model.
+        """
+        if self._predict_category is None:
+            return None
+        try:
+            guess = self._predict_category(description)
+            if guess is None:
+                return None
+            name, confidence = guess[0].upper(), float(guess[1])
+            if not registry.get(name).is_active:
+                return None
+        except Exception:
+            log.exception("auto-categorization failed; leaving the incident unclassified")
+            return None
+        return name, confidence
 
     def set_priority(self, actor_id: str, incident_id: str, priority: str, reason: str) -> None:
         """Staff override of the calculated priority. P1 audits it (PriorityChanged) and

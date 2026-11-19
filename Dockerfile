@@ -22,7 +22,8 @@ COPY domain ./domain
 COPY app ./app
 COPY notifications ./notifications
 COPY scripts ./scripts
-COPY data ./data
+# Synthetic training data is generated, not committed (deterministic: RANDOM_SEED).
+RUN python -m scripts.gen_synthetic
 COPY models ./models
 COPY docker/entrypoint.sh ./entrypoint.sh
 # P2's migrations (run by entrypoint.sh before the server starts).

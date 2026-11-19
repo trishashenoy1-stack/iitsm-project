@@ -12,6 +12,7 @@ import type {
   IncidentAction,
   IncidentFilters,
   NewIncident,
+  Priority,
   ReportOverview,
   ResolutionSuggestion,
   Service,
@@ -88,6 +89,8 @@ export const api = {
 
   listIncidents: (filters?: IncidentFilters) => request<Incident[]>(`/incidents${queryString(filters)}`),
   assignIncident: (id: string, technicianId: string) => post<Incident>(`/incidents/${id}/assign`, { technicianId }),
+  setPriority: (id: string, priority: Priority, reason: string) =>
+    post<Incident>(`/incidents/${id}/priority`, { priority, reason }),
   myWorkload: () => request<Workload>("/me/workload"),
 
   admin: {

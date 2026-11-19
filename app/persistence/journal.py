@@ -172,7 +172,10 @@ class IncidentJournal:
                 "reason": event.reason,
             })
         if isinstance(event, TransitionRejected):
-            return Step(**base, action="rejected", payload={
+            # Refused, so the state didn't change: previous and new are the same.
+            return Step(**base, action="rejected",
+                        previous_status=event.current_status.value,
+                        new_status=event.current_status.value, payload={
                 "attempted_action": event.attempted_action, "reason": event.reason,
                 "status": event.current_status.value,
             })
@@ -200,7 +203,9 @@ def describe(step: Step) -> str:
     p, who = step.payload, step.actor_id
     text = {
         "created": f"Created by {who}",
-        "classify": f"Classified as {p.get('category') or 'uncategorised'}",
+        "classify": f"Classified as {p.get('category') or 'uncategorised'}"
+                    + (f" automatically ({round(100 * float(p['auto_confidence']))}% confident)"
+                       if p.get("auto_confidence") is not None else ""),
         "assign": f"Assigned to {p.get('technician_id', '?')}"
                   + (f" by {p['via']}" if p.get("via") else f" by {who}"),
         "acknowledge": f"Acknowledged by {who}",
@@ -208,7 +213,8 @@ def describe(step: Step) -> str:
         "request_info": f"Requested information: {p.get('message', '')}".strip(),
         "provide_info": f"{who} replied: {p.get('message', '')}".strip(),
         "resolve": f"Marked resolved: {p.get('resolution', '')}".strip(),
-        "verify": f"Resolution verified by {who}",
+        "verify": (f"Resolution verified by {who}" if who != "SYSTEM" else
+                   "No reply from the reporter in time: treated as accepted (auto-close)"),
         "reject_resolution": f"Resolution rejected by {who}",
         "close": f"Closed by {who}",
         "set_priority": f"Priority set to {p.get('priority')}"

@@ -384,6 +384,20 @@ class IncidentRepository:
             query = query.where(IncidentRecord.id != exclude_id)
         return self._many(query)
 
+    def open_resubmission_of(self, reporter_id: str, service_id: str, description: str,
+                             since: datetime) -> str | None:
+        """Id of an open incident this reporter already filed with the same text and
+        service since `since` (case and spacing ignored), else None."""
+        wanted = " ".join(description.split()).lower()
+        rows = self._session.scalars(select(IncidentRecord).where(
+            IncidentRecord.reporter_id == reporter_id, IncidentRecord.service_id == service_id,
+            IncidentRecord.status.not_in(DONE_VALUES), IncidentRecord.created_at >= since,
+        ))
+        for row in rows:
+            if " ".join(row.description.split()).lower() == wanted:
+                return str(row.id)
+        return None
+
     def resolved_with_text(self) -> list[PersistedIncident]:
         return self._many(select(IncidentRecord).where(
             IncidentRecord.status.in_(DONE_VALUES), IncidentRecord.resolution.is_not(None),
